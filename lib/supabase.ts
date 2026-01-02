@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -10,14 +10,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseAnonKey ? '✓' : '✗');
 }
 
-export const supabase = createClient(
+export const supabase = createBrowserClient(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key',
-  {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
-  },
-})
+  supabaseAnonKey || 'placeholder-key'
+)
 
