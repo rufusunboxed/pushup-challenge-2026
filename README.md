@@ -44,4 +44,31 @@ The app expects the following Supabase tables:
 - Supabase
 - Lucide React (Icons)
 
+## Deployment to GitHub
+
+Your code is ready to push! Follow these steps:
+
+1. **Create a Personal Access Token on GitHub:**
+   - Go to: https://github.com/settings/tokens
+   - Click "Generate new token" → "Generate new token (classic)"
+   - Name it: "Pushup Tracker Push"
+   - Select scope: **`repo`** (full control of private repositories)
+   - Click "Generate token"
+   - **Copy the token immediately** (you won't see it again!)
+
+2. **Push to GitHub:**
+   ```bash
+   git push -u origin main
+   ```
+   
+   When prompted:
+   - **Username**: `rufusunboxed`
+   - **Password**: Paste your Personal Access Token (not your GitHub password)
+
+3. **Deploy to Vercel:**
+   - Go to: https://vercel.com
+   - Import your GitHub repository
+   - Add your environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY)
+   - Deploy!
+
 
