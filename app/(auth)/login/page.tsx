@@ -59,7 +59,9 @@ function LoginForm() {
         const errorMessage = loginError.message || 'An error occurred during login';
         
         // Check for specific error types
-        if (errorMessage.includes('Email not confirmed') || errorMessage.includes('confirm')) {
+        if (errorMessage.includes('Invalid API key') || errorMessage.includes('invalid api key') || errorMessage.includes('JWT')) {
+          setError('Invalid API key detected. This usually means the Supabase environment variables are not set correctly in Vercel. Please check: Project Settings → Environment Variables → Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set for Production, Preview, and Development environments.');
+        } else if (errorMessage.includes('Email not confirmed') || errorMessage.includes('confirm')) {
           setError('Your email is not confirmed. Please check your email for a confirmation link, or contact support to manually confirm your account.');
         } else if (errorMessage.includes('Invalid login credentials')) {
           setError('Invalid email or password. Please check your credentials and try again.');
