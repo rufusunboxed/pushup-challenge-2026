@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Plus, Minus, Check } from 'lucide-react';
-import { LogoutButton } from '@/components/LogoutButton';
+import { getCurrentDayRange, getCurrentMonthRange } from '@/lib/date-utils';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -15,6 +15,8 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [dailyTotal, setDailyTotal] = useState(0);
+  const [todayMaxSet, setTodayMaxSet] = useState(0);
+  const [monthlyMaxSet, setMonthlyMaxSet] = useState(0);
   const [limitError, setLimitError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export default function DashboardPage() {
     if (user) {
       fetchUserProfile();
       fetchDailyTotal();
+      fetchMaxSets();
     }
   }, [user]);
 
@@ -77,14 +80,30 @@ export default function DashboardPage() {
     if (!user) return;
     
     try {
+      // Try to fetch with display_name first
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name, last_name')
+        .select('first_name, last_name, display_name')
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
-      setUserProfile(data);
+      if (error) {
+        // If display_name column doesn't exist, try without it
+        if (error.message?.includes('column') || error.message?.includes('does not exist') || error.code === '42703') {
+          const { data: basicData, error: basicError } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', user.id)
+            .single();
+          
+          if (basicError) throw basicError;
+          setUserProfile(basicData);
+        } else {
+          throw error;
+        }
+      } else {
+        setUserProfile(data);
+      }
     } catch (error) {
       console.error('Error fetching user profile:', error);
     }
@@ -94,12 +113,7 @@ export default function DashboardPage() {
     if (!user) return;
 
     try {
-      const now = new Date();
-      const ukDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
-      const dayStart = new Date(ukDate);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(ukDate);
-      dayEnd.setHours(23, 59, 59, 999);
+      const { dayStart, dayEnd } = getCurrentDayRange();
 
       const { data: logs, error } = await supabase
         .from('pushup_logs')
@@ -114,6 +128,49 @@ export default function DashboardPage() {
       setDailyTotal(total);
     } catch (error) {
       console.error('Error fetching daily total:', error);
+    }
+  };
+
+  const fetchMaxSets = async () => {
+    if (!user) return;
+
+    try {
+      const { dayStart, dayEnd } = getCurrentDayRange();
+      const { monthStart, monthEnd } = getCurrentMonthRange();
+
+      // Fetch today's logs
+      const { data: todayLogs, error: todayError } = await supabase
+        .from('pushup_logs')
+        .select('count')
+        .eq('user_id', user.id)
+        .gte('created_at', dayStart.toISOString())
+        .lte('created_at', dayEnd.toISOString());
+
+      if (todayError) throw todayError;
+
+      // Fetch month's logs
+      const { data: monthLogs, error: monthError } = await supabase
+        .from('pushup_logs')
+        .select('count')
+        .eq('user_id', user.id)
+        .gte('created_at', monthStart.toISOString())
+        .lte('created_at', monthEnd.toISOString());
+
+      if (monthError) throw monthError;
+
+      // Calculate max sets
+      const todayMax = todayLogs?.length > 0 
+        ? Math.max(...todayLogs.map(log => log.count || 0))
+        : 0;
+      
+      const monthlyMax = monthLogs?.length > 0
+        ? Math.max(...monthLogs.map(log => log.count || 0))
+        : 0;
+
+      setTodayMaxSet(todayMax);
+      setMonthlyMaxSet(monthlyMax);
+    } catch (error) {
+      console.error('Error fetching max sets:', error);
     }
   };
 
@@ -162,8 +219,9 @@ export default function DashboardPage() {
       setSubmittedCount(count);
       setCount(20); // Reset to default after successful submission
       
-      // Refresh daily total
+      // Refresh daily total and max sets
       await fetchDailyTotal();
+      await fetchMaxSets();
       
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -186,15 +244,16 @@ export default function DashboardPage() {
     );
   }
 
+  // Use display_name if available, otherwise fall back to first_name + last_name
   const userName = userProfile 
-    ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() 
+    ? (userProfile.display_name || `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim())
     : '';
 
   return (
     <div className="min-h-screen px-4 py-8 pb-24 bg-white dark:bg-[#1a1a1a]">
       <div className="max-w-md mx-auto">
-        <div className="mb-6 flex items-start justify-between">
-          <div className="text-left flex-1">
+        <div className="mb-6">
+          <div className="text-left">
             <h1 className="text-3xl font-semibold mb-2 text-black dark:text-white">
               Pushup Counter
             </h1>
@@ -203,9 +262,6 @@ export default function DashboardPage() {
                 {userName}
               </p>
             )}
-          </div>
-          <div className="mt-1">
-            <LogoutButton />
           </div>
         </div>
 
@@ -303,15 +359,33 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Daily total display */}
+          {/* Statistics display */}
           <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                Today's Total
-              </p>
-              <p className="text-3xl font-bold text-black dark:text-white">
-                {dailyTotal}
-              </p>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Today's Total
+                </p>
+                <p className="text-2xl font-bold text-black dark:text-white">
+                  {dailyTotal}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Today's Max Set
+                </p>
+                <p className="text-2xl font-bold text-black dark:text-white">
+                  {todayMaxSet}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Max Set (Month)
+                </p>
+                <p className="text-2xl font-bold text-black dark:text-white">
+                  {monthlyMaxSet}
+                </p>
+              </div>
             </div>
           </div>
         </div>

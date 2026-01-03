@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ChevronDown, ChevronUp, Plus, Minus, Trash2, Check, Loader2 } from 'lucide-react';
-import { LogoutButton } from '@/components/LogoutButton';
 import { formatDateLabel } from '@/lib/date-utils';
 
 interface Submission {
@@ -599,17 +598,14 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen px-4 py-8 pb-24 bg-white dark:bg-[#1a1a1a]">
       <div className="max-w-2xl mx-auto">
-        <div className="mb-8 flex items-start justify-between">
-          <div className="text-left flex-1">
+        <div className="mb-8">
+          <div className="text-left">
             <h1 className="text-3xl font-semibold mb-2 text-black dark:text-white">
               History
             </h1>
             <p className="text-gray-600 dark:text-gray-400 text-sm">
               Your submission history
             </p>
-          </div>
-          <div className="mt-1">
-            <LogoutButton />
           </div>
         </div>
 

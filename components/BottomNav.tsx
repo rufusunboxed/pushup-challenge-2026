@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Home, Trophy, Clock } from 'lucide-react';
+import { Home, Trophy, Clock, User } from 'lucide-react';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -102,6 +102,7 @@ export function BottomNav() {
     if (pathname === '/dashboard') return 0;
     if (pathname === '/leaderboard') return 1;
     if (pathname === '/history') return 2;
+    if (pathname === '/profile') return 3;
     return -1;
   };
 
@@ -168,6 +169,19 @@ export function BottomNav() {
         >
           <Clock className="w-6 h-6" />
           <span className="text-xs font-medium">History</span>
+        </button>
+
+        <button
+          ref={(el) => { buttonRefs.current[3] = el; }}
+          onClick={() => router.push('/profile')}
+          className={`relative z-10 flex flex-col items-center justify-center gap-1 py-2 px-4 rounded-2xl transition-colors duration-200 ease-out min-h-[44px] active:scale-95 ${
+            isActive('/profile')
+              ? 'text-white dark:text-black'
+              : 'text-gray-600 dark:text-gray-400 hover:opacity-80'
+          }`}
+        >
+          <User className="w-6 h-6" />
+          <span className="text-xs font-medium">My Profile</span>
         </button>
       </div>
     </nav>

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { LogoutButton } from '@/components/LogoutButton';
 import { getCurrentMonthRange, getDaysInCurrentMonth, formatMonthYear, getCurrentDayRange } from '@/lib/date-utils';
 
 interface LeaderboardEntry {
@@ -30,6 +29,7 @@ export default function LeaderboardPage() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
   const [userChartData, setUserChartData] = useState<Map<string, DailyData[]>>(new Map());
   const [sortBy, setSortBy] = useState<'monthly' | 'daily' | 'maxSet'>('monthly');
+  const [userProfileColor, setUserProfileColor] = useState<string>('green');
 
   useEffect(() => {
     checkUser();
@@ -38,8 +38,37 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (user) {
       fetchLeaderboard();
+      fetchUserProfileColor();
     }
   }, [user]);
+
+  const fetchUserProfileColor = async () => {
+    if (!user) return;
+
+    try {
+      // Try to fetch profile_color, but handle if column doesn't exist
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('profile_color')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        // If column doesn't exist, use default
+        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
+          setUserProfileColor('green');
+          return;
+        }
+        throw error;
+      }
+
+      setUserProfileColor(data?.profile_color || 'green');
+    } catch (error) {
+      console.error('Error fetching user profile color:', error);
+      // Default to green if there's any error
+      setUserProfileColor('green');
+    }
+  };
 
   const checkUser = async () => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -55,12 +84,30 @@ export default function LeaderboardPage() {
     try {
       setLoading(true);
       
-      // Fetch all profiles
-      const { data: profiles, error: profilesError } = await supabase
+      // Fetch all profiles - try with display_name, fallback to basic columns if it doesn't exist
+      let profiles: any[] = [];
+      
+      const resultWithDisplay = await supabase
         .from('profiles')
-        .select('id, first_name, last_name');
-
-      if (profilesError) throw profilesError;
+        .select('id, first_name, last_name, display_name');
+      
+      if (resultWithDisplay.error) {
+        // If error mentions column doesn't exist, try without display_name
+        if (resultWithDisplay.error.message?.includes('column') || 
+            resultWithDisplay.error.message?.includes('does not exist') ||
+            resultWithDisplay.error.code === '42703') {
+          const resultBasic = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name');
+          
+          if (resultBasic.error) throw resultBasic.error;
+          profiles = resultBasic.data || [];
+        } else {
+          throw resultWithDisplay.error;
+        }
+      } else {
+        profiles = resultWithDisplay.data || [];
+      }
 
       const { dayStart, dayEnd } = getCurrentDayRange();
       const { monthStart, monthEnd } = getCurrentMonthRange();
@@ -73,9 +120,11 @@ export default function LeaderboardPage() {
       if (logsError) throw logsError;
 
       // Calculate stats for each user
-      const entries: LeaderboardEntry[] = profiles.map((profile) => {
+      const entries: LeaderboardEntry[] = profiles.map((profile: any) => {
         const userLogs = logs.filter((log) => log.user_id === profile.id);
-        const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown User';
+        // Use display_name if available, otherwise fall back to first_name + last_name
+        const defaultName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+        const fullName = profile.display_name || defaultName || 'Unknown User';
 
         // Monthly total (current month)
         const monthlyLogs = userLogs.filter((log) => {
@@ -251,6 +300,43 @@ export default function LeaderboardPage() {
     return null;
   };
 
+  const getProfileColorClasses = (color: string) => {
+    const colorMap: Record<string, { border: string; bg: string; badge: string }> = {
+      red: {
+        border: 'border-red-600 dark:border-red-500',
+        bg: 'bg-red-50 dark:bg-red-900/20',
+        badge: 'bg-red-600 dark:bg-red-500'
+      },
+      green: {
+        border: 'border-green-600 dark:border-green-500',
+        bg: 'bg-green-50 dark:bg-green-900/20',
+        badge: 'bg-green-600 dark:bg-green-500'
+      },
+      blue: {
+        border: 'border-blue-600 dark:border-blue-500',
+        bg: 'bg-blue-50 dark:bg-blue-900/20',
+        badge: 'bg-blue-600 dark:bg-blue-500'
+      },
+      purple: {
+        border: 'border-purple-600 dark:border-purple-500',
+        bg: 'bg-purple-50 dark:bg-purple-900/20',
+        badge: 'bg-purple-600 dark:bg-purple-500'
+      },
+      cyan: {
+        border: 'border-cyan-600 dark:border-cyan-500',
+        bg: 'bg-cyan-50 dark:bg-cyan-900/20',
+        badge: 'bg-cyan-600 dark:bg-cyan-500'
+      },
+      yellow: {
+        border: 'border-yellow-600 dark:border-yellow-500',
+        bg: 'bg-yellow-50 dark:bg-yellow-900/20',
+        badge: 'bg-yellow-600 dark:bg-yellow-500'
+      }
+    };
+
+    return colorMap[color] || colorMap.green;
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
@@ -262,17 +348,14 @@ export default function LeaderboardPage() {
   return (
     <div className="min-h-screen px-4 py-8 pb-24 bg-white dark:bg-[#1a1a1a]">
       <div className="max-w-2xl mx-auto">
-        <div className="mb-8 flex items-start justify-between">
-          <div className="text-left flex-1">
+        <div className="mb-8">
+          <div className="text-left">
             <h1 className="text-3xl font-semibold mb-2 text-black dark:text-white">
               Leaderboard
             </h1>
             <p className="text-gray-600 dark:text-gray-400 text-sm">
               {formatMonthYear()} Challenge
             </p>
-          </div>
-          <div className="mt-1">
-            <LogoutButton />
           </div>
         </div>
 
@@ -341,13 +424,14 @@ export default function LeaderboardPage() {
 
                       // Check if this is the current user's card
                       const isCurrentUser = entry.user_id === user.id;
+                      const colorClasses = isCurrentUser ? getProfileColorClasses(userProfileColor) : null;
 
                       return (
                         <div
                           key={entry.user_id}
                           className={`rounded-2xl border overflow-hidden ${
-                            isCurrentUser 
-                              ? 'bg-green-50 dark:bg-green-900/20 border-green-600 dark:border-green-500' 
+                            isCurrentUser && colorClasses
+                              ? `${colorClasses.bg} ${colorClasses.border}` 
                               : 'bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-800'
                           }`}
                         >
@@ -355,8 +439,8 @@ export default function LeaderboardPage() {
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-3">
                                 <div className={`w-8 h-8 rounded-full text-white dark:text-black flex items-center justify-center font-semibold text-sm ${
-                                  isCurrentUser 
-                                    ? 'bg-green-600 dark:bg-green-500' 
+                                  isCurrentUser && colorClasses
+                                    ? colorClasses.badge
                                     : 'bg-black dark:bg-white'
                                 }`}>
                                   {index + 1}
@@ -421,13 +505,13 @@ export default function LeaderboardPage() {
                           >
                             {isExpanded && chartData.length > 0 && (
                               <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4 animate-fade-in">
-                              <div className="mb-5">
+                              <div className="mb-2">
                                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                                   {formatMonthYear()} Daily Breakdown
                                 </p>
                               </div>
                               <div className="overflow-x-auto -mx-4 px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-                                <div className="flex items-end gap-1 relative" style={{ minWidth: `${chartData.length * 9}px`, width: '100%', paddingTop: '18px', paddingBottom: '4px', minHeight: '70px' }}>
+                                <div className="flex items-end gap-1 relative" style={{ minWidth: `${chartData.length * 9}px`, width: '100%', paddingTop: '32px', paddingBottom: '4px', minHeight: '84px' }}>
                                   {chartData.map((data, dayIndex) => {
                                     // Scale to 300 max
                                     const height = maxScale > 0 ? Math.min((data.count / maxScale) * 100, 100) : 0;
@@ -444,8 +528,8 @@ export default function LeaderboardPage() {
                                         title={`Day ${data.day}: ${data.count} pushups${isMaxSetDay ? ` (Max set: ${maxSetDay.maxSet})` : ''}`}
                                       >
                                         {/* Pushup count at top on hover */}
-                                        <div className="absolute -top-7 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                          <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm">
+                                        <div className="absolute -top-8 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                          <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm border border-gray-200 dark:border-gray-700">
                                             {data.count}
                                           </span>
                                         </div>
@@ -513,13 +597,14 @@ export default function LeaderboardPage() {
                     {inactive.map((entry) => {
                       // Check if this is the current user's card
                       const isCurrentUser = entry.user_id === user.id;
+                      const colorClasses = isCurrentUser ? getProfileColorClasses(userProfileColor) : null;
 
                       return (
                         <div
                           key={entry.user_id}
                           className={`rounded-2xl border overflow-hidden opacity-60 ${
-                            isCurrentUser 
-                              ? 'bg-green-50 dark:bg-green-900/20 border-green-600 dark:border-green-500' 
+                            isCurrentUser && colorClasses
+                              ? `${colorClasses.bg} ${colorClasses.border}` 
                               : 'bg-gray-100 dark:bg-[#1f1f1f] border-gray-300 dark:border-gray-700'
                           }`}
                         >
