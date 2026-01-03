@@ -277,13 +277,13 @@ export default function DashboardPage() {
           <button
             onClick={handleSubmit}
             disabled={loading || count <= 0 || (dailyTotal + count > 300)}
-            className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-medium text-lg active:opacity-80 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[60px] shadow-lg shadow-green-500/20"
+            className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg shadow-green-500/20"
           >
             {submitted ? (
-              <>
+              <span className="flex items-center animate-pulse">
                 <Check className="w-5 h-5 mr-2" />
                 Submitted!
-              </>
+              </span>
             ) : loading ? (
               'Submitting...'
             ) : (
@@ -293,11 +293,11 @@ export default function DashboardPage() {
 
           {/* Visual feedback when submitted */}
           {submitted && submittedCount > 0 && (
-            <div className="mt-4 text-center animate-pulse">
+            <div className="mt-4 text-center animate-fade-in">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                 Added
               </p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400 animate-scale-in">
                 +{submittedCount}
               </p>
             </div>

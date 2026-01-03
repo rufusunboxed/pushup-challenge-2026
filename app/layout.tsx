@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
+import { ClientLayout } from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
   title: "Pushup Tracker 2026",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-white dark:bg-[#1a1a1a]">
-        {children}
+        <ClientLayout>
+          {children}
+        </ClientLayout>
         <BottomNav />
       </body>
     </html>

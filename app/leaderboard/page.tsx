@@ -324,11 +324,11 @@ export default function LeaderboardPage() {
                         className="p-2 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg transition-colors"
                         aria-label={isExpanded ? 'Collapse chart' : 'Expand chart'}
                       >
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        )}
+                        <ChevronDown 
+                          className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform duration-300 ease-in-out ${
+                            isExpanded ? 'rotate-180' : 'rotate-0'
+                          }`}
+                        />
                       </button>
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-sm">
@@ -365,8 +365,15 @@ export default function LeaderboardPage() {
                   </div>
 
                   {/* Collapsible Chart Section */}
-                  {isExpanded && chartData.length > 0 && (
-                    <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <div 
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      isExpanded && chartData.length > 0 
+                        ? 'max-h-[1000px] opacity-100' 
+                        : 'max-h-0 opacity-0'
+                    }`}
+                  >
+                    {isExpanded && chartData.length > 0 && (
+                      <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4 animate-fade-in">
                       <div className="mb-5">
                         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                           {formatMonthYear()} Daily Breakdown
@@ -432,8 +439,9 @@ export default function LeaderboardPage() {
                           Hover over bars to see day and count
                         </p>
                       </div>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

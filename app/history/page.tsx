@@ -656,11 +656,11 @@ export default function HistoryPage() {
                           } pushups
                         </p>
                       </div>
-                      {isExpanded ? (
-                        <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      )}
+                      <ChevronDown 
+                        className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform duration-300 ease-in-out ${
+                          isExpanded ? 'rotate-180' : 'rotate-0'
+                        }`}
+                      />
                     </button>
                     {hasUnsavedChanges(dayGroup.dateLabel) && (
                       <button
@@ -686,8 +686,15 @@ export default function HistoryPage() {
                     )}
                   </div>
 
-                  {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
+                  <div 
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      isExpanded 
+                        ? 'max-h-[2000px] opacity-100' 
+                        : 'max-h-0 opacity-0'
+                    }`}
+                  >
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 animate-fade-in">
                       <div className="pt-4 space-y-2">
                         {dayGroup.submissions.map((submission) => {
                           const isDeleted = isSubmissionDeleted(submission.id, dayGroup.dateLabel);
@@ -796,8 +803,9 @@ export default function HistoryPage() {
                           );
                         })}
                       </div>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
