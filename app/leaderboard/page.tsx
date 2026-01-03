@@ -303,15 +303,26 @@ export default function LeaderboardPage() {
                 ? chartData.reduce((max, day) => day.maxSet > max.maxSet ? day : max, chartData[0])
                 : null;
 
+              // Check if this is the current user's card
+              const isCurrentUser = entry.user_id === user.id;
+
               return (
                 <div
                   key={entry.user_id}
-                  className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+                  className={`rounded-2xl border overflow-hidden ${
+                    isCurrentUser 
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-600 dark:border-green-500' 
+                      : 'bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-800'
+                  }`}
                 >
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-semibold text-sm">
+                        <div className={`w-8 h-8 rounded-full text-white dark:text-black flex items-center justify-center font-semibold text-sm ${
+                          isCurrentUser 
+                            ? 'bg-green-600 dark:bg-green-500' 
+                            : 'bg-black dark:bg-white'
+                        }`}>
                           {index + 1}
                         </div>
                         <h3 className="font-semibold text-lg text-black dark:text-white flex items-center gap-2">
