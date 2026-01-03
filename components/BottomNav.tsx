@@ -25,23 +25,54 @@ export function BottomNav() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Update position when pathname changes (navigation)
   useEffect(() => {
-    // Small delay to ensure buttons are rendered
-    const timer = setTimeout(() => {
-      updateIndicatorPosition();
-    }, 10);
+    // Use double requestAnimationFrame to ensure DOM is fully laid out
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        updateIndicatorPosition();
+      });
+    });
     
     // Also update on window resize
     const handleResize = () => {
-      setTimeout(() => updateIndicatorPosition(), 10);
+      requestAnimationFrame(() => {
+        updateIndicatorPosition();
+      });
     };
     window.addEventListener('resize', handleResize);
     
     return () => {
-      clearTimeout(timer);
       window.removeEventListener('resize', handleResize);
     };
   }, [pathname]);
+
+  // Calculate initial position when component becomes visible (after auth check)
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      // Use double requestAnimationFrame to ensure DOM is fully laid out
+      let rafId1: number;
+      let rafId2: number;
+      let retryTimer: NodeJS.Timeout;
+      
+      rafId1 = requestAnimationFrame(() => {
+        rafId2 = requestAnimationFrame(() => {
+          updateIndicatorPosition();
+          
+          // Fallback retry if buttons might not be ready yet
+          retryTimer = setTimeout(() => {
+            updateIndicatorPosition();
+          }, 100);
+        });
+      });
+      
+      return () => {
+        if (rafId1) cancelAnimationFrame(rafId1);
+        if (rafId2) cancelAnimationFrame(rafId2);
+        if (retryTimer) clearTimeout(retryTimer);
+      };
+    }
+  }, [loading, isAuthenticated, pathname]);
 
   const checkAuth = async () => {
     const { data: { user } } = await supabase.auth.getUser();
