@@ -214,6 +214,36 @@ export default function LeaderboardPage() {
     return sorted;
   };
 
+  const splitActiveAndInactive = (): { active: LeaderboardEntry[], inactive: LeaderboardEntry[] } => {
+    const sorted = getSortedLeaderboard();
+    const active: LeaderboardEntry[] = [];
+    const inactive: LeaderboardEntry[] = [];
+
+    sorted.forEach((entry) => {
+      let isActive = false;
+      switch (sortBy) {
+        case 'daily':
+          isActive = entry.daily_total > 0;
+          break;
+        case 'maxSet':
+          isActive = entry.max_set > 0;
+          break;
+        case 'monthly':
+        default:
+          isActive = entry.monthly_total > 0;
+          break;
+      }
+
+      if (isActive) {
+        active.push(entry);
+      } else {
+        inactive.push(entry);
+      }
+    });
+
+    return { active, inactive };
+  };
+
   const getMedalEmoji = (index: number) => {
     if (index === 0) return '🥇';
     if (index === 1) return '🥈';
@@ -291,172 +321,240 @@ export default function LeaderboardPage() {
             </div>
 
             <div className="space-y-3">
-              {getSortedLeaderboard().map((entry, index) => {
-              const isExpanded = expandedUsers.has(entry.user_id);
-              const chartData = userChartData.get(entry.user_id) || [];
-              // Scale bars to 300 max (not actual max count)
-              const maxScale = 300;
-              const medalEmoji = getMedalEmoji(index);
-              
-              // Find the day with the highest max set
-              const maxSetDay = chartData.length > 0
-                ? chartData.reduce((max, day) => day.maxSet > max.maxSet ? day : max, chartData[0])
-                : null;
+              {(() => {
+                const { active, inactive } = splitActiveAndInactive();
+                
+                return (
+                  <>
+                    {/* Active Users */}
+                    {active.map((entry, index) => {
+                      const isExpanded = expandedUsers.has(entry.user_id);
+                      const chartData = userChartData.get(entry.user_id) || [];
+                      // Scale bars to 300 max (not actual max count)
+                      const maxScale = 300;
+                      const medalEmoji = getMedalEmoji(index);
+                      
+                      // Find the day with the highest max set
+                      const maxSetDay = chartData.length > 0
+                        ? chartData.reduce((max, day) => day.maxSet > max.maxSet ? day : max, chartData[0])
+                        : null;
 
-              // Check if this is the current user's card
-              const isCurrentUser = entry.user_id === user.id;
+                      // Check if this is the current user's card
+                      const isCurrentUser = entry.user_id === user.id;
 
-              return (
-                <div
-                  key={entry.user_id}
-                  className={`rounded-2xl border overflow-hidden ${
-                    isCurrentUser 
-                      ? 'bg-green-50 dark:bg-green-900/20 border-green-600 dark:border-green-500' 
-                      : 'bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-800'
-                  }`}
-                >
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full text-white dark:text-black flex items-center justify-center font-semibold text-sm ${
-                          isCurrentUser 
-                            ? 'bg-green-600 dark:bg-green-500' 
-                            : 'bg-black dark:bg-white'
-                        }`}>
-                          {index + 1}
-                        </div>
-                        <h3 className="font-semibold text-lg text-black dark:text-white flex items-center gap-2">
-                          {entry.full_name}
-                          {medalEmoji && <span className="text-2xl">{medalEmoji}</span>}
-                        </h3>
-                      </div>
-                      <button
-                        onClick={() => toggleUserChart(entry.user_id)}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg transition-colors"
-                        aria-label={isExpanded ? 'Collapse chart' : 'Expand chart'}
-                      >
-                        <ChevronDown 
-                          className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform duration-300 ease-in-out ${
-                            isExpanded ? 'rotate-180' : 'rotate-0'
+                      return (
+                        <div
+                          key={entry.user_id}
+                          className={`rounded-2xl border overflow-hidden ${
+                            isCurrentUser 
+                              ? 'bg-green-50 dark:bg-green-900/20 border-green-600 dark:border-green-500' 
+                              : 'bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-800'
                           }`}
-                        />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-600 dark:text-gray-400 mb-1">Monthly Total</p>
-                        <p className="font-semibold text-black dark:text-white text-lg">
-                          {entry.monthly_total}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600 dark:text-gray-400 mb-1">Daily Total</p>
-                        <p className="font-semibold text-black dark:text-white text-lg">
-                          {entry.daily_total}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-yellow-500 dark:text-yellow-400 mb-1">Max Set</p>
-                        <div className="flex items-baseline gap-2">
-                          <p className="font-semibold text-black dark:text-white text-lg">
-                            {entry.max_set}
-                          </p>
-                          {entry.max_set_date && (
-                            <p className="text-xs text-gray-500 dark:text-gray-500">
-                              {entry.max_set_date.toLocaleDateString('en-GB', { 
-                                day: 'numeric', 
-                                month: 'short',
-                                timeZone: 'Europe/London'
-                              })}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Collapsible Chart Section */}
-                  <div 
-                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                      isExpanded && chartData.length > 0 
-                        ? 'max-h-[1000px] opacity-100' 
-                        : 'max-h-0 opacity-0'
-                    }`}
-                  >
-                    {isExpanded && chartData.length > 0 && (
-                      <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4 animate-fade-in">
-                      <div className="mb-5">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          {formatMonthYear()} Daily Breakdown
-                        </p>
-                      </div>
-                      <div className="overflow-x-auto -mx-4 px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-                        <div className="flex items-end gap-1 relative" style={{ minWidth: `${chartData.length * 9}px`, width: '100%', paddingTop: '18px', paddingBottom: '4px', minHeight: '70px' }}>
-                          {chartData.map((data, dayIndex) => {
-                            // Scale to 300 max
-                            const height = maxScale > 0 ? Math.min((data.count / maxScale) * 100, 100) : 0;
-                            const isMaxSetDay = maxSetDay && data.day === maxSetDay.day && maxSetDay.maxSet > 0;
-                            
-                            return (
-                              <div
-                                key={dayIndex}
-                                className="flex flex-col items-center group relative"
-                                style={{ 
-                                  minWidth: '8px',
-                                  flex: '1 1 0%'
-                                }}
-                                title={`Day ${data.day}: ${data.count} pushups${isMaxSetDay ? ` (Max set: ${maxSetDay.maxSet})` : ''}`}
-                              >
-                                {/* Pushup count at top on hover */}
-                                <div className="absolute -top-7 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                  <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm">
-                                    {data.count}
-                                  </span>
+                        >
+                          <div className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full text-white dark:text-black flex items-center justify-center font-semibold text-sm ${
+                                  isCurrentUser 
+                                    ? 'bg-green-600 dark:bg-green-500' 
+                                    : 'bg-black dark:bg-white'
+                                }`}>
+                                  {index + 1}
                                 </div>
-                                
-                                <div className="w-full relative" style={{ height: '48px', minHeight: '48px' }}>
-                                  {/* Placeholder bar (always shown - white background) */}
-                                  <div
-                                    className={`absolute w-full rounded-t bg-white dark:bg-gray-700 bottom-0 ${
-                                      isMaxSetDay 
-                                        ? 'border-2 border-yellow-500 dark:border-yellow-400' 
-                                        : 'border border-gray-300 dark:border-gray-600'
-                                    }`}
-                                    style={{ height: '100%', width: '100%' }}
-                                  />
-                                  
-                                  {/* Green fill bar (overlay from bottom) */}
-                                  {data.count > 0 && (
-                                    <div
-                                      className={`absolute w-full rounded-t bg-green-600 dark:bg-green-500 group-hover:bg-green-700 dark:group-hover:bg-green-400 transition-all bottom-0 left-0 z-10 ${
-                                        isMaxSetDay 
-                                          ? 'border-2 border-yellow-500 dark:border-yellow-400' 
-                                          : ''
-                                      }`}
-                                      style={{ height: `${Math.max(height, 2)}%`, width: '100%' }}
-                                    />
+                                <h3 className="font-semibold text-lg text-black dark:text-white flex items-center gap-2">
+                                  {entry.full_name}
+                                  {medalEmoji && <span className="text-2xl">{medalEmoji}</span>}
+                                </h3>
+                              </div>
+                              <button
+                                onClick={() => toggleUserChart(entry.user_id)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg transition-colors"
+                                aria-label={isExpanded ? 'Collapse chart' : 'Expand chart'}
+                              >
+                                <ChevronDown 
+                                  className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform duration-300 ease-in-out ${
+                                    isExpanded ? 'rotate-180' : 'rotate-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-600 dark:text-gray-400 mb-1">Monthly Total</p>
+                                <p className="font-semibold text-black dark:text-white text-lg">
+                                  {entry.monthly_total}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600 dark:text-gray-400 mb-1">Daily Total</p>
+                                <p className="font-semibold text-black dark:text-white text-lg">
+                                  {entry.daily_total}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-yellow-500 dark:text-yellow-400 mb-1">Max Set</p>
+                                <div className="flex items-baseline gap-2">
+                                  <p className="font-semibold text-black dark:text-white text-lg">
+                                    {entry.max_set}
+                                  </p>
+                                  {entry.max_set_date && (
+                                    <p className="text-xs text-gray-500 dark:text-gray-500">
+                                      {entry.max_set_date.toLocaleDateString('en-GB', { 
+                                        day: 'numeric', 
+                                        month: 'short',
+                                        timeZone: 'Europe/London'
+                                      })}
+                                    </p>
                                   )}
                                 </div>
-                                <span className="text-[9px] text-gray-500 dark:text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  {data.day}
-                                </span>
                               </div>
-                            );
-                          })}
+                            </div>
+                          </div>
+
+                          {/* Collapsible Chart Section */}
+                          <div 
+                            className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                              isExpanded && chartData.length > 0 
+                                ? 'max-h-[1000px] opacity-100' 
+                                : 'max-h-0 opacity-0'
+                            }`}
+                          >
+                            {isExpanded && chartData.length > 0 && (
+                              <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4 animate-fade-in">
+                              <div className="mb-5">
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                                  {formatMonthYear()} Daily Breakdown
+                                </p>
+                              </div>
+                              <div className="overflow-x-auto -mx-4 px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                                <div className="flex items-end gap-1 relative" style={{ minWidth: `${chartData.length * 9}px`, width: '100%', paddingTop: '18px', paddingBottom: '4px', minHeight: '70px' }}>
+                                  {chartData.map((data, dayIndex) => {
+                                    // Scale to 300 max
+                                    const height = maxScale > 0 ? Math.min((data.count / maxScale) * 100, 100) : 0;
+                                    const isMaxSetDay = maxSetDay && data.day === maxSetDay.day && maxSetDay.maxSet > 0;
+                                    
+                                    return (
+                                      <div
+                                        key={dayIndex}
+                                        className="flex flex-col items-center group relative"
+                                        style={{ 
+                                          minWidth: '8px',
+                                          flex: '1 1 0%'
+                                        }}
+                                        title={`Day ${data.day}: ${data.count} pushups${isMaxSetDay ? ` (Max set: ${maxSetDay.maxSet})` : ''}`}
+                                      >
+                                        {/* Pushup count at top on hover */}
+                                        <div className="absolute -top-7 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                          <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm">
+                                            {data.count}
+                                          </span>
+                                        </div>
+                                        
+                                        <div className="w-full relative" style={{ height: '48px', minHeight: '48px' }}>
+                                          {/* Placeholder bar (always shown - white background) */}
+                                          <div
+                                            className={`absolute w-full rounded-t bg-white dark:bg-gray-700 bottom-0 ${
+                                              isMaxSetDay 
+                                                ? 'border-2 border-yellow-500 dark:border-yellow-400' 
+                                                : 'border border-gray-300 dark:border-gray-600'
+                                            }`}
+                                            style={{ height: '100%', width: '100%' }}
+                                          />
+                                          
+                                          {/* Green fill bar (overlay from bottom) */}
+                                          {data.count > 0 && (
+                                            <div
+                                              className={`absolute w-full rounded-t bg-green-600 dark:bg-green-500 group-hover:bg-green-700 dark:group-hover:bg-green-400 transition-all bottom-0 left-0 z-10 ${
+                                                isMaxSetDay 
+                                                  ? 'border-2 border-yellow-500 dark:border-yellow-400' 
+                                                  : ''
+                                              }`}
+                                              style={{ height: `${Math.max(height, 2)}%`, width: '100%' }}
+                                            />
+                                          )}
+                                        </div>
+                                        <span className="text-[9px] text-gray-500 dark:text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          {data.day}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className="mt-1 text-left">
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Hover over bars to see day and count
+                                </p>
+                              </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Divider between active and inactive users */}
+                    {inactive.length > 0 && active.length > 0 && (
+                      <div className="py-4">
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
+                          </div>
+                          <div className="relative flex justify-center">
+                            <span className="bg-white dark:bg-[#1a1a1a] px-4 text-sm text-gray-500 dark:text-gray-400">
+                              Inactive this month
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-1 text-left">
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          Hover over bars to see day and count
-                        </p>
-                      </div>
-                      </div>
                     )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+
+                    {/* Inactive Users - Compact Grayed Cards */}
+                    {inactive.map((entry) => {
+                      // Check if this is the current user's card
+                      const isCurrentUser = entry.user_id === user.id;
+
+                      return (
+                        <div
+                          key={entry.user_id}
+                          className={`rounded-2xl border overflow-hidden opacity-60 ${
+                            isCurrentUser 
+                              ? 'bg-green-50 dark:bg-green-900/20 border-green-600 dark:border-green-500' 
+                              : 'bg-gray-100 dark:bg-[#1f1f1f] border-gray-300 dark:border-gray-700'
+                          }`}
+                        >
+                          <div className="p-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className={`font-medium text-sm flex items-center gap-2 ${
+                                isCurrentUser 
+                                  ? 'text-green-700 dark:text-green-400' 
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}>
+                                {entry.full_name}
+                              </h3>
+                              <div className="flex items-center gap-3 text-xs">
+                                <div className="text-gray-400 dark:text-gray-500">
+                                  <span className="text-gray-500 dark:text-gray-600">Monthly: </span>
+                                  <span className="font-medium">{entry.monthly_total}</span>
+                                </div>
+                                <div className="text-gray-400 dark:text-gray-500">
+                                  <span className="text-gray-500 dark:text-gray-600">Daily: </span>
+                                  <span className="font-medium">{entry.daily_total}</span>
+                                </div>
+                                <div className="text-gray-400 dark:text-gray-500">
+                                  <span className="text-gray-500 dark:text-gray-600">Max: </span>
+                                  <span className="font-medium">{entry.max_set}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+            </div>
           </>
         )}
       </div>
