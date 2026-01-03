@@ -367,59 +367,65 @@ export default function LeaderboardPage() {
                   {/* Collapsible Chart Section */}
                   {isExpanded && chartData.length > 0 && (
                     <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-                      <div className="mb-12">
+                      <div className="mb-5">
                         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                           {formatMonthYear()} Daily Breakdown
                         </p>
                       </div>
-                      <div className="flex items-end justify-between gap-1 h-12 relative pt-1">
-                        {chartData.map((data, dayIndex) => {
-                          // Scale to 300 max
-                          const height = maxScale > 0 ? Math.min((data.count / maxScale) * 100, 100) : 0;
-                          const isMaxSetDay = maxSetDay && data.day === maxSetDay.day && maxSetDay.maxSet > 0;
-                          
-                          return (
-                            <div
-                              key={dayIndex}
-                              className="flex-1 flex flex-col items-center group relative"
-                              title={`Day ${data.day}: ${data.count} pushups${isMaxSetDay ? ` (Max set: ${maxSetDay.maxSet})` : ''}`}
-                            >
-                              {/* Pushup count at top on hover */}
-                              <div className="absolute -top-7 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm">
-                                  {data.count}
-                                </span>
-                              </div>
-                              
-                              <div className="w-full h-full relative" style={{ minHeight: '48px' }}>
-                                {/* Placeholder bar (always shown - white background) */}
-                                <div
-                                  className={`absolute w-full rounded-t bg-white dark:bg-gray-700 bottom-0 ${
-                                    isMaxSetDay 
-                                      ? 'border-2 border-yellow-500 dark:border-yellow-400' 
-                                      : 'border border-gray-300 dark:border-gray-600'
-                                  }`}
-                                  style={{ height: '100%', width: '100%' }}
-                                />
+                      <div className="overflow-x-auto -mx-4 px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                        <div className="flex items-end gap-1 relative" style={{ minWidth: `${chartData.length * 9}px`, width: '100%', paddingTop: '18px', paddingBottom: '4px', minHeight: '70px' }}>
+                          {chartData.map((data, dayIndex) => {
+                            // Scale to 300 max
+                            const height = maxScale > 0 ? Math.min((data.count / maxScale) * 100, 100) : 0;
+                            const isMaxSetDay = maxSetDay && data.day === maxSetDay.day && maxSetDay.maxSet > 0;
+                            
+                            return (
+                              <div
+                                key={dayIndex}
+                                className="flex flex-col items-center group relative"
+                                style={{ 
+                                  minWidth: '8px',
+                                  flex: '1 1 0%'
+                                }}
+                                title={`Day ${data.day}: ${data.count} pushups${isMaxSetDay ? ` (Max set: ${maxSetDay.maxSet})` : ''}`}
+                              >
+                                {/* Pushup count at top on hover */}
+                                <div className="absolute -top-7 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                  <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm">
+                                    {data.count}
+                                  </span>
+                                </div>
                                 
-                                {/* Green fill bar (overlay from bottom) */}
-                                {data.count > 0 && (
+                                <div className="w-full relative" style={{ height: '48px', minHeight: '48px' }}>
+                                  {/* Placeholder bar (always shown - white background) */}
                                   <div
-                                    className={`absolute w-full rounded-t bg-green-600 dark:bg-green-500 group-hover:bg-green-700 dark:group-hover:bg-green-400 transition-all bottom-0 left-0 z-10 ${
+                                    className={`absolute w-full rounded-t bg-white dark:bg-gray-700 bottom-0 ${
                                       isMaxSetDay 
                                         ? 'border-2 border-yellow-500 dark:border-yellow-400' 
-                                        : ''
+                                        : 'border border-gray-300 dark:border-gray-600'
                                     }`}
-                                    style={{ height: `${Math.max(height, 2)}%`, width: '100%' }}
+                                    style={{ height: '100%', width: '100%' }}
                                   />
-                                )}
+                                  
+                                  {/* Green fill bar (overlay from bottom) */}
+                                  {data.count > 0 && (
+                                    <div
+                                      className={`absolute w-full rounded-t bg-green-600 dark:bg-green-500 group-hover:bg-green-700 dark:group-hover:bg-green-400 transition-all bottom-0 left-0 z-10 ${
+                                        isMaxSetDay 
+                                          ? 'border-2 border-yellow-500 dark:border-yellow-400' 
+                                          : ''
+                                      }`}
+                                      style={{ height: `${Math.max(height, 2)}%`, width: '100%' }}
+                                    />
+                                  )}
+                                </div>
+                                <span className="text-[9px] text-gray-500 dark:text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {data.day}
+                                </span>
                               </div>
-                              <span className="text-[9px] text-gray-500 dark:text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {data.day}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
                       <div className="mt-1 text-left">
                         <p className="text-xs text-gray-600 dark:text-gray-400">
