@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [todayMaxSet, setTodayMaxSet] = useState(0);
   const [monthlyMaxSet, setMonthlyMaxSet] = useState(0);
   const [limitError, setLimitError] = useState<string | null>(null);
+  const [profileColor, setProfileColor] = useState<string>('green');
 
   useEffect(() => {
     checkUser();
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       fetchUserProfile();
+      fetchProfileColor();
       fetchDailyTotal();
       fetchMaxSets();
     }
@@ -106,6 +108,33 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
+    }
+  };
+
+  const fetchProfileColor = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('profile_color')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        // If column doesn't exist, use default
+        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
+          setProfileColor('green');
+          return;
+        }
+        throw error;
+      }
+
+      setProfileColor(data?.profile_color || 'green');
+    } catch (error) {
+      console.error('Error fetching profile color:', error);
+      // Default to green if there's any error
+      setProfileColor('green');
     }
   };
 
@@ -249,6 +278,58 @@ export default function DashboardPage() {
     ? (userProfile.display_name || `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim())
     : '';
 
+  // Helper function to get button classes based on profile color
+  const getButtonColorClasses = (color: string) => {
+    const colorMap: Record<string, { bg: string; hover: string; shadow: string; text: string; darkText: string }> = {
+      red: {
+        bg: 'bg-red-600',
+        hover: 'hover:bg-red-700',
+        shadow: 'shadow-red-500/20',
+        text: 'text-red-600',
+        darkText: 'dark:text-red-400'
+      },
+      green: {
+        bg: 'bg-green-600',
+        hover: 'hover:bg-green-700',
+        shadow: 'shadow-green-500/20',
+        text: 'text-green-600',
+        darkText: 'dark:text-green-400'
+      },
+      blue: {
+        bg: 'bg-blue-600',
+        hover: 'hover:bg-blue-700',
+        shadow: 'shadow-blue-500/20',
+        text: 'text-blue-600',
+        darkText: 'dark:text-blue-400'
+      },
+      purple: {
+        bg: 'bg-purple-600',
+        hover: 'hover:bg-purple-700',
+        shadow: 'shadow-purple-500/20',
+        text: 'text-purple-600',
+        darkText: 'dark:text-purple-400'
+      },
+      cyan: {
+        bg: 'bg-cyan-600',
+        hover: 'hover:bg-cyan-700',
+        shadow: 'shadow-cyan-500/20',
+        text: 'text-cyan-600',
+        darkText: 'dark:text-cyan-400'
+      },
+      yellow: {
+        bg: 'bg-yellow-600',
+        hover: 'hover:bg-yellow-700',
+        shadow: 'shadow-yellow-500/20',
+        text: 'text-yellow-600',
+        darkText: 'dark:text-yellow-400'
+      }
+    };
+
+    return colorMap[color] || colorMap.green;
+  };
+
+  const buttonColors = getButtonColorClasses(profileColor);
+
   return (
     <div className="min-h-screen px-4 py-8 pb-24 bg-white dark:bg-[#1a1a1a]">
       <div className="max-w-md mx-auto">
@@ -329,11 +410,11 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Submit button - green */}
+          {/* Submit button - uses profile color */}
           <button
             onClick={handleSubmit}
             disabled={loading || count <= 0 || (dailyTotal + count > 300)}
-            className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg shadow-green-500/20"
+            className={`w-full py-4 rounded-2xl ${buttonColors.bg} ${buttonColors.hover} text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg ${buttonColors.shadow}`}
           >
             {submitted ? (
               <span className="flex items-center animate-pulse">
@@ -353,7 +434,7 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                 Added
               </p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 animate-scale-in">
+              <p className={`text-2xl font-bold ${buttonColors.text} ${buttonColors.darkText} animate-scale-in`}>
                 +{submittedCount}
               </p>
             </div>

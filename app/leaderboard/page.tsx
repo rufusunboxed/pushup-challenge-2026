@@ -30,6 +30,9 @@ export default function LeaderboardPage() {
   const [userChartData, setUserChartData] = useState<Map<string, DailyData[]>>(new Map());
   const [sortBy, setSortBy] = useState<'monthly' | 'daily' | 'maxSet'>('monthly');
   const [userProfileColor, setUserProfileColor] = useState<string>('green');
+  const [userProfileColors, setUserProfileColors] = useState<Map<string, string>>(new Map());
+  const [selectedDayByUser, setSelectedDayByUser] = useState<Map<string, {day: number, count: number, date: Date}>>(new Map());
+  const [userMaxDailyInMonth, setUserMaxDailyInMonth] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     checkUser();
@@ -41,6 +44,12 @@ export default function LeaderboardPage() {
       fetchUserProfileColor();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (leaderboard.length > 0) {
+      fetchAllUserProfileColors();
+    }
+  }, [leaderboard]);
 
   const fetchUserProfileColor = async () => {
     if (!user) return;
@@ -67,6 +76,47 @@ export default function LeaderboardPage() {
       console.error('Error fetching user profile color:', error);
       // Default to green if there's any error
       setUserProfileColor('green');
+    }
+  };
+
+  const fetchAllUserProfileColors = async () => {
+    try {
+      const userIds = leaderboard.map(entry => entry.user_id);
+      if (userIds.length === 0) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, profile_color')
+        .in('id', userIds);
+
+      if (error) {
+        // If column doesn't exist, set all to green
+        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
+          const colorMap = new Map<string, string>();
+          userIds.forEach(id => colorMap.set(id, 'green'));
+          setUserProfileColors(colorMap);
+          return;
+        }
+        throw error;
+      }
+
+      const colorMap = new Map<string, string>();
+      data?.forEach(profile => {
+        colorMap.set(profile.id, profile.profile_color || 'green');
+      });
+      // Set default for any missing users
+      userIds.forEach(id => {
+        if (!colorMap.has(id)) {
+          colorMap.set(id, 'green');
+        }
+      });
+      setUserProfileColors(colorMap);
+    } catch (error) {
+      console.error('Error fetching user profile colors:', error);
+      // Default all to green on error
+      const colorMap = new Map<string, string>();
+      leaderboard.forEach(entry => colorMap.set(entry.user_id, 'green'));
+      setUserProfileColors(colorMap);
     }
   };
 
@@ -218,6 +268,10 @@ export default function LeaderboardPage() {
         });
       }
 
+      // Calculate max daily pushups in this month for this user
+      const maxDailyInMonth = Math.max(...chartData.map(d => d.count), 0);
+      setUserMaxDailyInMonth(prev => new Map(prev).set(userId, maxDailyInMonth));
+
       // Cache the data
       setUserChartData(prev => new Map(prev).set(userId, chartData));
     } catch (error) {
@@ -298,6 +352,70 @@ export default function LeaderboardPage() {
     if (index === 1) return '🥈';
     if (index === 2) return '🥉';
     return null;
+  };
+
+  // Format date for tooltip display
+  const formatDateForTooltip = (date: Date): string => {
+    const day = date.getDate();
+    const month = date.toLocaleDateString('en-GB', { month: 'short' });
+    const year = date.getFullYear();
+    
+    // Add ordinal suffix (st, nd, rd, th)
+    const getOrdinalSuffix = (n: number): string => {
+      const j = n % 10;
+      const k = n % 100;
+      if (j === 1 && k !== 11) return 'st';
+      if (j === 2 && k !== 12) return 'nd';
+      if (j === 3 && k !== 13) return 'rd';
+      return 'th';
+    };
+    
+    return `${day}${getOrdinalSuffix(day)} ${month} ${year}`;
+  };
+
+  // Get heatmap color classes based on profile color and intensity (opacity-based)
+  const getHeatmapColorClasses = (
+    count: number,
+    maxDailyInMonth: number,
+    profileColor: string,
+    isFuture: boolean,
+    isPastEmpty: boolean
+  ): string => {
+    if (isFuture) {
+      return 'bg-white dark:bg-gray-800';
+    }
+    
+    if (isPastEmpty) {
+      return 'bg-gray-200 dark:bg-gray-700';
+    }
+    
+    if (maxDailyInMonth === 0) {
+      return 'bg-gray-200 dark:bg-gray-700';
+    }
+    
+    const percentage = (count / maxDailyInMonth) * 100;
+    
+    // 5 intensity levels mapped to opacity
+    let opacityClass: string;
+    if (percentage <= 20) opacityClass = 'opacity-20';
+    else if (percentage <= 40) opacityClass = 'opacity-40';
+    else if (percentage <= 60) opacityClass = 'opacity-60';
+    else if (percentage <= 80) opacityClass = 'opacity-80';
+    else opacityClass = 'opacity-100';
+    
+    // Base color map (single color per profile color)
+    const baseColorMap: Record<string, string> = {
+      red: 'bg-red-600',
+      green: 'bg-green-600',
+      blue: 'bg-blue-600',
+      purple: 'bg-purple-600',
+      cyan: 'bg-cyan-600',
+      yellow: 'bg-yellow-600',
+    };
+    
+    const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+    
+    return `${baseColor} ${opacityClass}`;
   };
 
   const getProfileColorClasses = (color: string) => {
@@ -413,14 +531,7 @@ export default function LeaderboardPage() {
                     {active.map((entry, index) => {
                       const isExpanded = expandedUsers.has(entry.user_id);
                       const chartData = userChartData.get(entry.user_id) || [];
-                      // Scale bars to 300 max (not actual max count)
-                      const maxScale = 300;
                       const medalEmoji = getMedalEmoji(index);
-                      
-                      // Find the day with the highest max set
-                      const maxSetDay = chartData.length > 0
-                        ? chartData.reduce((max, day) => day.maxSet > max.maxSet ? day : max, chartData[0])
-                        : null;
 
                       // Check if this is the current user's card
                       const isCurrentUser = entry.user_id === user.id;
@@ -503,75 +614,107 @@ export default function LeaderboardPage() {
                                 : 'max-h-0 opacity-0'
                             }`}
                           >
-                            {isExpanded && chartData.length > 0 && (
-                              <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4 animate-fade-in">
-                              <div className="mb-2">
-                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                  {formatMonthYear()} Daily Breakdown
-                                </p>
-                              </div>
-                              <div className="overflow-x-auto -mx-4 px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-                                <div className="flex items-end gap-1 relative" style={{ minWidth: `${chartData.length * 9}px`, width: '100%', paddingTop: '32px', paddingBottom: '4px', minHeight: '84px' }}>
-                                  {chartData.map((data, dayIndex) => {
-                                    // Scale to 300 max
-                                    const height = maxScale > 0 ? Math.min((data.count / maxScale) * 100, 100) : 0;
-                                    const isMaxSetDay = maxSetDay && data.day === maxSetDay.day && maxSetDay.maxSet > 0;
-                                    
-                                    return (
-                                      <div
-                                        key={dayIndex}
-                                        className="flex flex-col items-center group relative"
-                                        style={{ 
-                                          minWidth: '8px',
-                                          flex: '1 1 0%'
-                                        }}
-                                        title={`Day ${data.day}: ${data.count} pushups${isMaxSetDay ? ` (Max set: ${maxSetDay.maxSet})` : ''}`}
-                                      >
-                                        {/* Pushup count at top on hover */}
-                                        <div className="absolute -top-8 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                          <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap bg-white dark:bg-[#2a2a2a] px-1.5 py-0.5 rounded shadow-sm border border-gray-200 dark:border-gray-700">
-                                            {data.count}
-                                          </span>
-                                        </div>
-                                        
-                                        <div className="w-full relative" style={{ height: '48px', minHeight: '48px' }}>
-                                          {/* Placeholder bar (always shown - white background) */}
-                                          <div
-                                            className={`absolute w-full rounded-t bg-white dark:bg-gray-700 bottom-0 ${
-                                              isMaxSetDay 
-                                                ? 'border-2 border-yellow-500 dark:border-yellow-400' 
-                                                : 'border border-gray-300 dark:border-gray-600'
-                                            }`}
-                                            style={{ height: '100%', width: '100%' }}
-                                          />
-                                          
-                                          {/* Green fill bar (overlay from bottom) */}
-                                          {data.count > 0 && (
-                                            <div
-                                              className={`absolute w-full rounded-t bg-green-600 dark:bg-green-500 group-hover:bg-green-700 dark:group-hover:bg-green-400 transition-all bottom-0 left-0 z-10 ${
-                                                isMaxSetDay 
-                                                  ? 'border-2 border-yellow-500 dark:border-yellow-400' 
-                                                  : ''
-                                              }`}
-                                              style={{ height: `${Math.max(height, 2)}%`, width: '100%' }}
-                                            />
-                                          )}
-                                        </div>
-                                        <span className="text-[9px] text-gray-500 dark:text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          {data.day}
+                            {isExpanded && chartData.length > 0 && (() => {
+                              const maxDailyInMonth = userMaxDailyInMonth.get(entry.user_id) || 0;
+                              const selectedDay = selectedDayByUser.get(entry.user_id);
+                              
+                              // Get today's date in UK timezone
+                              const now = new Date();
+                              const ukToday = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+                              const todayDay = ukToday.getDate();
+                              const todayMonth = ukToday.getMonth();
+                              const todayYear = ukToday.getFullYear();
+                              
+                              // Get current month info
+                              const { monthStart } = getCurrentMonthRange();
+                              const currentMonth = monthStart.getMonth();
+                              const currentYear = monthStart.getFullYear();
+                              
+                              return (
+                                <div className="px-4 pb-3 border-t border-gray-200 dark:border-gray-700 pt-3 animate-fade-in">
+                                  {/* Header with month name and selected day info - fixed height */}
+                                  <div className="mb-1 flex justify-between items-start min-h-[32px]">
+                                    <div className="text-left flex flex-col">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                                        {formatMonthYear()} Daily Breakdown
+                                      </p>
+                                    </div>
+                                    <div className="text-right min-w-[120px]">
+                                      {selectedDay ? (
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                          {selectedDay.count > 0 
+                                            ? `${selectedDay.count}, ${formatDateForTooltip(selectedDay.date)}`
+                                            : formatDateForTooltip(selectedDay.date)}
                                         </span>
-                                      </div>
-                                    );
-                                  })}
+                                      ) : (
+                                        <span className="text-xs text-transparent">Placeholder</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Heatmap grid - left aligned, 11 squares per row with same sizing as history */}
+                                  <div className="flex flex-wrap gap-[2px] justify-start">
+                                    {chartData.map((data) => {
+                                      // Determine if this day is in the future
+                                      const isFuture = currentYear === todayYear && 
+                                                       currentMonth === todayMonth && 
+                                                       data.day > todayDay;
+                                      
+                                      // Determine if this is a past empty day
+                                      const isPastEmpty = !isFuture && data.count === 0;
+                                      
+                                      // Use the current logged-in user's profile color for all heatmaps
+                                      const colorClass = getHeatmapColorClasses(
+                                        data.count,
+                                        maxDailyInMonth,
+                                        userProfileColor,
+                                        isFuture,
+                                        isPastEmpty
+                                      );
+                                      
+                                      // Create date object for this day
+                                      const dayDate = new Date(currentYear, currentMonth, data.day);
+                                      
+                                      return (
+                                        <div
+                                          key={data.day}
+                                          className={`w-[16px] h-[16px] sm:w-[12px] sm:h-[12px] rounded-sm ${colorClass} cursor-pointer transition-all hover:scale-110`}
+                                          onMouseEnter={() => {
+                                            setSelectedDayByUser(prev => {
+                                              const next = new Map(prev);
+                                              next.set(entry.user_id, {
+                                                day: data.day,
+                                                count: data.count,
+                                                date: dayDate
+                                              });
+                                              return next;
+                                            });
+                                          }}
+                                          onMouseLeave={() => {
+                                            setSelectedDayByUser(prev => {
+                                              const next = new Map(prev);
+                                              next.delete(entry.user_id);
+                                              return next;
+                                            });
+                                          }}
+                                          onTouchStart={() => {
+                                            setSelectedDayByUser(prev => {
+                                              const next = new Map(prev);
+                                              next.set(entry.user_id, {
+                                                day: data.day,
+                                                count: data.count,
+                                                date: dayDate
+                                              });
+                                              return next;
+                                            });
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="mt-1 text-left">
-                                <p className="text-xs text-gray-600 dark:text-gray-400">
-                                  Hover over bars to see day and count
-                                </p>
-                              </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
                         </div>
                       );
