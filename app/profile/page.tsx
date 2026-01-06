@@ -218,7 +218,7 @@ export default function ProfilePage() {
         <div className="mb-8 flex items-start justify-between">
           <div className="text-left flex-1">
             <h1 className="text-3xl font-semibold mb-2 text-black dark:text-white">
-              My Profile
+              Profile
             </h1>
             <p className="text-gray-600 dark:text-gray-400 text-sm">
               Manage your account settings

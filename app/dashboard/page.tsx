@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const [monthlyMaxSet, setMonthlyMaxSet] = useState(0);
   const [limitError, setLimitError] = useState<string | null>(null);
   const [profileColor, setProfileColor] = useState<string>('green');
+  const [profileColorLoaded, setProfileColorLoaded] = useState<boolean>(false);
 
   useEffect(() => {
     checkUser();
@@ -26,7 +27,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (user) {
+      // Fetch profile (including color) first to avoid color flash
       fetchUserProfile();
+      // Keep fetchProfileColor as fallback in case profile_color column doesn't exist in first query
       fetchProfileColor();
       fetchDailyTotal();
       fetchMaxSets();
@@ -44,6 +47,8 @@ export default function DashboardPage() {
       if (currentUser) {
         console.log('User found:', currentUser.id);
         setUser(currentUser);
+        // Fetch profile color immediately to avoid flash
+        fetchProfileColorForUser(currentUser.id);
         return;
       }
       
@@ -72,9 +77,35 @@ export default function DashboardPage() {
       const { data: { user: sessionUser } } = await supabase.auth.getUser();
       if (sessionUser) {
         setUser(sessionUser);
+        // Fetch profile color immediately to avoid flash
+        fetchProfileColorForUser(sessionUser.id);
       } else {
         router.push('/login');
       }
+    }
+  };
+
+  // Helper function to fetch profile color by user ID (called early to avoid flash)
+  const fetchProfileColorForUser = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('profile_color')
+        .eq('id', userId)
+        .single();
+
+      if (!error && data?.profile_color) {
+        setProfileColor(data.profile_color);
+        setProfileColorLoaded(true);
+      } else {
+        // If no color found, mark as loaded with default
+        setProfileColorLoaded(true);
+      }
+    } catch (error) {
+      // Silently fail - will be fetched again in fetchProfileColor
+      console.error('Error fetching profile color early:', error);
+      // Mark as loaded even on error to prevent infinite loading
+      setProfileColorLoaded(true);
     }
   };
 
@@ -82,16 +113,17 @@ export default function DashboardPage() {
     if (!user) return;
     
     try {
-      // Try to fetch with display_name first
+      // Fetch profile data including profile_color in one query
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name, last_name, display_name')
+        .select('first_name, last_name, display_name, profile_color')
         .eq('id', user.id)
         .single();
 
       if (error) {
-        // If display_name column doesn't exist, try without it
+        // If display_name or profile_color columns don't exist, try without them
         if (error.message?.includes('column') || error.message?.includes('does not exist') || error.code === '42703') {
+          // Try fetching basic profile first
           const { data: basicData, error: basicError } = await supabase
             .from('profiles')
             .select('first_name, last_name')
@@ -100,41 +132,56 @@ export default function DashboardPage() {
           
           if (basicError) throw basicError;
           setUserProfile(basicData);
+          
+          // Try fetching profile_color separately
+          const { data: colorData } = await supabase
+            .from('profiles')
+            .select('profile_color')
+            .eq('id', user.id)
+            .single();
+          
+          const color = colorData?.profile_color || 'green';
+          setProfileColor(color);
+          setProfileColorLoaded(true);
         } else {
           throw error;
         }
       } else {
         setUserProfile(data);
+        // Set profile color immediately if available
+        const color = data?.profile_color || 'green';
+        setProfileColor(color);
+        setProfileColorLoaded(true);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
+      setProfileColor('green');
+      setProfileColorLoaded(true);
     }
   };
 
   const fetchProfileColor = async () => {
+    // This function is now redundant but kept for backwards compatibility
+    // Profile color is fetched in fetchUserProfile
     if (!user) return;
+    
+    // Only fetch if not already loaded (fallback)
+    if (!profileColorLoaded) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('profile_color')
+          .eq('id', user.id)
+          .single();
 
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('profile_color')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        // If column doesn't exist, use default
-        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
-          setProfileColor('green');
-          return;
+        if (!error && data?.profile_color) {
+          setProfileColor(data.profile_color);
         }
-        throw error;
+        setProfileColorLoaded(true);
+      } catch (error) {
+        console.error('Error fetching profile color:', error);
+        setProfileColorLoaded(true);
       }
-
-      setProfileColor(data?.profile_color || 'green');
-    } catch (error) {
-      console.error('Error fetching profile color:', error);
-      // Default to green if there's any error
-      setProfileColor('green');
     }
   };
 
@@ -410,23 +457,29 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Submit button - uses profile color */}
-          <button
-            onClick={handleSubmit}
-            disabled={loading || count <= 0 || (dailyTotal + count > 300)}
-            className={`w-full py-4 rounded-2xl ${buttonColors.bg} ${buttonColors.hover} text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg ${buttonColors.shadow}`}
-          >
-            {submitted ? (
-              <span className="flex items-center animate-pulse">
-                <Check className="w-5 h-5 mr-2" />
-                Submitted!
-              </span>
-            ) : loading ? (
-              'Submitting...'
-            ) : (
-              'Submit'
-            )}
-          </button>
+          {/* Submit button - uses profile color, only render after color is loaded */}
+          {profileColorLoaded ? (
+            <button
+              onClick={handleSubmit}
+              disabled={loading || count <= 0 || (dailyTotal + count > 300)}
+              className={`w-full py-4 rounded-2xl ${buttonColors.bg} ${buttonColors.hover} text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg ${buttonColors.shadow}`}
+            >
+              {submitted ? (
+                <span className="flex items-center animate-pulse">
+                  <Check className="w-5 h-5 mr-2" />
+                  Submitted!
+                </span>
+              ) : loading ? (
+                'Submitting...'
+              ) : (
+                'Submit'
+              )}
+            </button>
+          ) : (
+            <div className="w-full py-4 rounded-2xl bg-gray-200 dark:bg-gray-700 min-h-[60px] flex items-center justify-center">
+              <span className="text-gray-400 dark:text-gray-500">Loading...</span>
+            </div>
+          )}
 
           {/* Visual feedback when submitted */}
           {submitted && submittedCount > 0 && (
