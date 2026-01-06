@@ -328,48 +328,26 @@ export default function DashboardPage() {
   // Helper function to get button classes based on profile color
   const getButtonColorClasses = (color: string) => {
     const colorMap: Record<string, { bg: string; hover: string; shadow: string; text: string; darkText: string }> = {
-      red: {
-        bg: 'bg-red-600',
-        hover: 'hover:bg-red-700',
-        shadow: 'shadow-red-500/20',
-        text: 'text-red-600',
-        darkText: 'dark:text-red-400'
-      },
-      green: {
-        bg: 'bg-green-600',
-        hover: 'hover:bg-green-700',
-        shadow: 'shadow-green-500/20',
-        text: 'text-green-600',
-        darkText: 'dark:text-green-400'
-      },
-      blue: {
-        bg: 'bg-blue-600',
-        hover: 'hover:bg-blue-700',
-        shadow: 'shadow-blue-500/20',
-        text: 'text-blue-600',
-        darkText: 'dark:text-blue-400'
-      },
-      purple: {
-        bg: 'bg-purple-600',
-        hover: 'hover:bg-purple-700',
-        shadow: 'shadow-purple-500/20',
-        text: 'text-purple-600',
-        darkText: 'dark:text-purple-400'
-      },
-      cyan: {
-        bg: 'bg-cyan-600',
-        hover: 'hover:bg-cyan-700',
-        shadow: 'shadow-cyan-500/20',
-        text: 'text-cyan-600',
-        darkText: 'dark:text-cyan-400'
-      },
-      yellow: {
-        bg: 'bg-yellow-600',
-        hover: 'hover:bg-yellow-700',
-        shadow: 'shadow-yellow-500/20',
-        text: 'text-yellow-600',
-        darkText: 'dark:text-yellow-400'
-      }
+      red: { bg: 'bg-red-600', hover: 'hover:bg-red-700', shadow: 'shadow-red-500/20', text: 'text-red-600', darkText: 'dark:text-red-400' },
+      orange: { bg: 'bg-orange-600', hover: 'hover:bg-orange-700', shadow: 'shadow-orange-500/20', text: 'text-orange-600', darkText: 'dark:text-orange-400' },
+      amber: { bg: 'bg-amber-600', hover: 'hover:bg-amber-700', shadow: 'shadow-amber-500/20', text: 'text-amber-600', darkText: 'dark:text-amber-400' },
+      yellow: { bg: 'bg-yellow-600', hover: 'hover:bg-yellow-700', shadow: 'shadow-yellow-500/20', text: 'text-yellow-600', darkText: 'dark:text-yellow-400' },
+      lime: { bg: 'bg-lime-600', hover: 'hover:bg-lime-700', shadow: 'shadow-lime-500/20', text: 'text-lime-600', darkText: 'dark:text-lime-400' },
+      green: { bg: 'bg-green-600', hover: 'hover:bg-green-700', shadow: 'shadow-green-500/20', text: 'text-green-600', darkText: 'dark:text-green-400' },
+      emerald: { bg: 'bg-emerald-600', hover: 'hover:bg-emerald-700', shadow: 'shadow-emerald-500/20', text: 'text-emerald-600', darkText: 'dark:text-emerald-400' },
+      mint: { bg: 'bg-teal-400', hover: 'hover:bg-teal-500', shadow: 'shadow-teal-300/20', text: 'text-teal-600', darkText: 'dark:text-teal-300' },
+      teal: { bg: 'bg-teal-600', hover: 'hover:bg-teal-700', shadow: 'shadow-teal-500/20', text: 'text-teal-600', darkText: 'dark:text-teal-400' },
+      cyan: { bg: 'bg-cyan-600', hover: 'hover:bg-cyan-700', shadow: 'shadow-cyan-500/20', text: 'text-cyan-600', darkText: 'dark:text-cyan-400' },
+      sky: { bg: 'bg-sky-600', hover: 'hover:bg-sky-700', shadow: 'shadow-sky-500/20', text: 'text-sky-600', darkText: 'dark:text-sky-400' },
+      blue: { bg: 'bg-blue-600', hover: 'hover:bg-blue-700', shadow: 'shadow-blue-500/20', text: 'text-blue-600', darkText: 'dark:text-blue-400' },
+      indigo: { bg: 'bg-indigo-600', hover: 'hover:bg-indigo-700', shadow: 'shadow-indigo-500/20', text: 'text-indigo-600', darkText: 'dark:text-indigo-400' },
+      purple: { bg: 'bg-purple-600', hover: 'hover:bg-purple-700', shadow: 'shadow-purple-500/20', text: 'text-purple-600', darkText: 'dark:text-purple-400' },
+      violet: { bg: 'bg-violet-600', hover: 'hover:bg-violet-700', shadow: 'shadow-violet-500/20', text: 'text-violet-600', darkText: 'dark:text-violet-400' },
+      pink: { bg: 'bg-pink-600', hover: 'hover:bg-pink-700', shadow: 'shadow-pink-500/20', text: 'text-pink-600', darkText: 'dark:text-pink-400' },
+      rose: { bg: 'bg-rose-600', hover: 'hover:bg-rose-700', shadow: 'shadow-rose-500/20', text: 'text-rose-600', darkText: 'dark:text-rose-400' },
+      coral: { bg: 'bg-orange-400', hover: 'hover:bg-orange-500', shadow: 'shadow-orange-300/20', text: 'text-orange-600', darkText: 'dark:text-orange-300' },
+      brown: { bg: 'bg-amber-800', hover: 'hover:bg-amber-900', shadow: 'shadow-amber-700/20', text: 'text-amber-800', darkText: 'dark:text-amber-600' },
+      slate: { bg: 'bg-slate-600', hover: 'hover:bg-slate-700', shadow: 'shadow-slate-500/20', text: 'text-slate-600', darkText: 'dark:text-slate-400' },
     };
 
     return colorMap[color] || colorMap.green;

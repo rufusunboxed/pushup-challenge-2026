@@ -8,11 +8,25 @@ import { Save, Loader2 } from 'lucide-react';
 
 const PROFILE_COLORS = [
   { name: 'red', label: 'Red', bg: 'bg-red-600', darkBg: 'bg-red-500' },
-  { name: 'green', label: 'Green', bg: 'bg-green-600', darkBg: 'bg-green-500' },
-  { name: 'blue', label: 'Blue', bg: 'bg-blue-600', darkBg: 'bg-blue-500' },
-  { name: 'purple', label: 'Purple', bg: 'bg-purple-600', darkBg: 'bg-purple-500' },
-  { name: 'cyan', label: 'Cyan', bg: 'bg-cyan-600', darkBg: 'bg-cyan-500' },
+  { name: 'orange', label: 'Orange', bg: 'bg-orange-600', darkBg: 'bg-orange-500' },
+  { name: 'amber', label: 'Amber', bg: 'bg-amber-600', darkBg: 'bg-amber-500' },
   { name: 'yellow', label: 'Yellow', bg: 'bg-yellow-600', darkBg: 'bg-yellow-500' },
+  { name: 'lime', label: 'Lime', bg: 'bg-lime-600', darkBg: 'bg-lime-500' },
+  { name: 'green', label: 'Green', bg: 'bg-green-600', darkBg: 'bg-green-500' },
+  { name: 'emerald', label: 'Emerald', bg: 'bg-emerald-600', darkBg: 'bg-emerald-500' },
+  { name: 'mint', label: 'Mint', bg: 'bg-teal-400', darkBg: 'bg-teal-300' },
+  { name: 'teal', label: 'Teal', bg: 'bg-teal-600', darkBg: 'bg-teal-500' },
+  { name: 'cyan', label: 'Cyan', bg: 'bg-cyan-600', darkBg: 'bg-cyan-500' },
+  { name: 'sky', label: 'Sky', bg: 'bg-sky-600', darkBg: 'bg-sky-500' },
+  { name: 'blue', label: 'Blue', bg: 'bg-blue-600', darkBg: 'bg-blue-500' },
+  { name: 'indigo', label: 'Indigo', bg: 'bg-indigo-600', darkBg: 'bg-indigo-500' },
+  { name: 'purple', label: 'Purple', bg: 'bg-purple-600', darkBg: 'bg-purple-500' },
+  { name: 'violet', label: 'Violet', bg: 'bg-violet-600', darkBg: 'bg-violet-500' },
+  { name: 'pink', label: 'Pink', bg: 'bg-pink-600', darkBg: 'bg-pink-500' },
+  { name: 'rose', label: 'Rose', bg: 'bg-rose-600', darkBg: 'bg-rose-500' },
+  { name: 'coral', label: 'Coral', bg: 'bg-orange-400', darkBg: 'bg-orange-300' },
+  { name: 'brown', label: 'Brown', bg: 'bg-amber-800', darkBg: 'bg-amber-700' },
+  { name: 'slate', label: 'Slate', bg: 'bg-slate-600', darkBg: 'bg-slate-500' },
 ] as const;
 
 export default function ProfilePage() {
@@ -194,6 +208,17 @@ export default function ProfilePage() {
       }
 
       setProfileColor(color);
+      
+      // Store in sessionStorage for immediate access
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('profileColor', color);
+      }
+      
+      // Dispatch custom event to notify other components (like BottomNav)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('profileColorChanged', { detail: { color } }));
+      }
+      
       setSuccess('Profile color updated successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (error: any) {
@@ -389,20 +414,20 @@ export default function ProfilePage() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
               Choose a color for your card in the leaderboard
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-2">
               {PROFILE_COLORS.map((color) => (
                 <button
                   key={color.name}
                   onClick={() => handleColorChange(color.name)}
                   disabled={colorSaving}
-                  className={`relative p-4 rounded-xl border-2 transition-all ${
+                  className={`relative p-2 rounded-xl border-2 transition-all ${
                     profileColor === color.name
-                      ? 'border-black dark:border-white ring-2 ring-offset-2 ring-black dark:ring-white'
+                      ? 'border-black dark:border-white ring-2 ring-offset-1 ring-black dark:ring-white'
                       : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <div className={`w-full h-12 rounded-lg ${color.bg} dark:${color.darkBg}`} />
-                  <p className="mt-2 text-xs font-medium text-black dark:text-white text-center">
+                  <div className={`w-full h-10 rounded-lg ${color.bg} dark:${color.darkBg}`} />
+                  <p className="mt-1.5 text-[10px] font-medium text-black dark:text-white text-center">
                     {color.label}
                   </p>
                   {profileColor === color.name && (
