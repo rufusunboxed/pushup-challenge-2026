@@ -133,12 +133,19 @@ export default function HistoryPage() {
     ukToday.setHours(0, 0, 0, 0);
     
     // Create a map of date strings to pushup counts
+    // Use UK date components to create consistent date keys
     const pushupMap = new Map<string, number>();
     let maxDaily = 0;
     let lifetime = 0;
     
     dayGroups.forEach(dayGroup => {
-      const dateKey = dayGroup.date.toISOString().split('T')[0];
+      // Convert dayGroup.date to UK timezone and format as YYYY-MM-DD
+      const ukDate = new Date(dayGroup.date.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+      ukDate.setHours(0, 0, 0, 0);
+      const year = ukDate.getFullYear();
+      const month = String(ukDate.getMonth() + 1).padStart(2, '0');
+      const day = String(ukDate.getDate()).padStart(2, '0');
+      const dateKey = `${year}-${month}-${day}`;
       pushupMap.set(dateKey, dayGroup.total);
       if (dayGroup.total > maxDaily) {
         maxDaily = dayGroup.total;
@@ -157,9 +164,15 @@ export default function HistoryPage() {
     
     // Process heatmap days
     const heatmapData: HeatmapDay[] = allDays.map(date => {
-      const dateKey = date.toISOString().split('T')[0];
+      // Convert to UK timezone first, then create dateKey to match dayGroups
       const ukDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/London' }));
       ukDate.setHours(0, 0, 0, 0);
+      
+      // Create dateKey using UK date components (YYYY-MM-DD) to match dayGroups
+      const year = ukDate.getFullYear();
+      const month = String(ukDate.getMonth() + 1).padStart(2, '0');
+      const day = String(ukDate.getDate()).padStart(2, '0');
+      const dateKey = `${year}-${month}-${day}`;
       
       const isFuture = ukDate > ukToday;
       const isToday = ukDate.getTime() === ukToday.getTime();
@@ -214,21 +227,33 @@ export default function HistoryPage() {
       }
     }
     
-    // Calculate monthly stats for ALL months (including future)
+    // Calculate monthly stats directly from dayGroups (database data)
+    // This ensures we're using the actual recorded data, not processed heatmap data
     const monthlyMap = new Map<string, MonthlyStats>();
     
-    heatmapData.forEach(day => {
-      const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+    // First, calculate stats from actual dayGroups (past data)
+    dayGroups.forEach(dayGroup => {
+      // Convert to UK timezone to get correct month
+      const ukDate = new Date(dayGroup.date.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+      ukDate.setHours(0, 0, 0, 0);
+      const monthKey = `${ukDate.getFullYear()}-${ukDate.getMonth()}`;
+      
       const existing = monthlyMap.get(monthKey) || { total: 0, maxSet: 0 };
       
-      // Only add to total/maxSet if not future
-      if (!day.isFuture) {
-        monthlyMap.set(monthKey, {
-          total: existing.total + day.count,
-          maxSet: Math.max(existing.maxSet, day.count),
-        });
-      } else {
-        // Future month - ensure entry exists with zeros
+      // Calculate max set from individual submissions
+      const maxSetForDay = Math.max(...dayGroup.submissions.map(sub => sub.count), 0);
+      
+      monthlyMap.set(monthKey, {
+        total: existing.total + dayGroup.total,
+        maxSet: Math.max(existing.maxSet, maxSetForDay),
+      });
+    });
+    
+    // Now ensure all months in the heatmap range have entries (including future months with zeros)
+    heatmapData.forEach(day => {
+      const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+      if (!monthlyMap.has(monthKey)) {
+        // Future month or month with no data - ensure entry exists
         monthlyMap.set(monthKey, { total: 0, maxSet: 0 });
       }
     });
@@ -387,8 +412,8 @@ export default function HistoryPage() {
       
       // Find the leftmost visible square by checking DOM positions
       // Check all squares, including those partially visible
-      const squares = container.querySelectorAll('[data-date-key]');
-      let leftmostSquare: Element | null = null;
+      const squares = container.querySelectorAll<HTMLElement>('[data-date-key]');
+      let leftmostSquare: HTMLElement | null = null;
       let leftmostScrollPosition = Infinity;
       
       squares.forEach(square => {
@@ -407,8 +432,8 @@ export default function HistoryPage() {
       });
       
       // If we found a square, get its date and determine month
-      if (leftmostSquare) {
-        const dateKey = leftmostSquare.getAttribute('data-date-key');
+      if (leftmostSquare !== null) {
+        const dateKey = (leftmostSquare as HTMLElement).getAttribute('data-date-key');
         if (dateKey) {
           try {
             const date = new Date(dateKey);
