@@ -112,9 +112,19 @@ export function BottomNav() {
         const buttonRect = button.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
         
+        // Calculate indicator width as 1/5 of container width (20%)
+        const containerWidth = containerRect.width;
+        const indicatorWidth = containerWidth / 5;
+        
+        // Calculate button center position
+        const buttonCenter = buttonRect.left - containerRect.left + (buttonRect.width / 2);
+        
+        // Center indicator on button but make it wider
+        const indicatorLeft = buttonCenter - (indicatorWidth / 2);
+        
         setIndicatorStyle({
-          left: buttonRect.left - containerRect.left,
-          width: buttonRect.width,
+          left: indicatorLeft,
+          width: indicatorWidth,
         });
       }
     }
@@ -171,7 +181,7 @@ export function BottomNav() {
   const indicatorColors = getIndicatorColorClasses(profileColor);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 safe-area-inset-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 pb-4 safe-area-inset-bottom">
       <div 
         ref={containerRef}
         className="max-w-md mx-auto relative flex items-center justify-between px-2 py-2"

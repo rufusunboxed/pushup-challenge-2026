@@ -232,16 +232,19 @@ export default function RecordPage() {
     <div className="min-h-screen px-4 py-8 pb-24 bg-white dark:bg-[#1a1a1a] flex flex-col">
       <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <div className="text-left">
             <h1 className="text-3xl font-semibold mb-2 text-black dark:text-white">
               Record
             </h1>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Touch your nose to record each rep
+            </p>
           </div>
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col justify-center gap-4">
+        <div className="flex-1 flex flex-col justify-center gap-4 -mt-4 sm:mt-0">
           {/* Top Row: Submit and -1 buttons */}
           <div className="flex gap-3">
             {/* Submit Button */}
