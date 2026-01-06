@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ChevronDown, ChevronUp, Plus, Minus, Trash2, Check, Loader2 } from 'lucide-react';
@@ -24,6 +24,18 @@ interface PendingChanges {
   deletes: Set<string>; // submissionIds to delete
 }
 
+interface HeatmapDay {
+  date: Date;
+  count: number;
+  isFuture: boolean;
+  isToday: boolean;
+}
+
+interface MonthlyStats {
+  total: number;
+  maxSet: number;
+}
+
 export default function HistoryPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -33,6 +45,20 @@ export default function HistoryPage() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChanges>>(new Map());
   const [savingDays, setSavingDays] = useState<Set<string>>(new Set());
+  
+  // Heatmap state
+  const [profileColor, setProfileColor] = useState<string>('green');
+  const [heatmapDays, setHeatmapDays] = useState<HeatmapDay[]>([]);
+  const [maxDailyPushups, setMaxDailyPushups] = useState<number>(0);
+  const [monthlyStats, setMonthlyStats] = useState<Map<string, MonthlyStats>>(new Map());
+  const [lifetimeTotal, setLifetimeTotal] = useState<number>(0);
+  const [visibleMonth, setVisibleMonth] = useState<string>('');
+  const [weekGrid, setWeekGrid] = useState<(HeatmapDay | null)[][]>([]);
+  const [totalWeeks, setTotalWeeks] = useState<number>(0);
+  const [daysBeforeMonday, setDaysBeforeMonday] = useState<number>(0);
+  const [selectedDay, setSelectedDay] = useState<HeatmapDay | null>(null);
+  const heatmapContainerRef = useRef<HTMLDivElement>(null);
+  const todayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     checkUser();
@@ -41,8 +67,217 @@ export default function HistoryPage() {
   useEffect(() => {
     if (user) {
       fetchUserHistory();
+      fetchUserProfileColor();
     }
   }, [user]);
+
+  // Refresh data periodically to add new weeks as time passes
+  // This ensures the heatmap always shows 18 months into the future
+  useEffect(() => {
+    if (!user) return;
+
+    // Refresh data every hour to catch new weeks
+    const refreshInterval = setInterval(() => {
+      fetchUserHistory();
+    }, 60 * 60 * 1000); // 1 hour
+
+    return () => clearInterval(refreshInterval);
+  }, [user]);
+
+  // Generate all days from first Monday of 2026 to 18 months into future from today
+  const generateYearRange = (): { days: Date[]; firstMonday: Date; daysBeforeMonday: number } => {
+    const jan1_2026 = new Date('2026-01-01');
+    jan1_2026.setHours(0, 0, 0, 0);
+    
+    // Find first Monday of 2026 (Monday = 1)
+    const dayOfWeek = jan1_2026.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+    const firstMonday = new Date(jan1_2026);
+    firstMonday.setDate(jan1_2026.getDate() + daysToMonday);
+    
+    const now = new Date();
+    const ukDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+    
+    // End at 18 months into future from today
+    const endDate = new Date(ukDate);
+    endDate.setMonth(endDate.getMonth() + 18);
+    // Get last day of that month
+    // setDate(0) gets the last day of the previous month, so we need to go to next month first
+    const targetMonth = endDate.getMonth();
+    endDate.setMonth(targetMonth + 1);
+    endDate.setDate(0); // This gives us the last day of targetMonth
+    endDate.setHours(23, 59, 59, 999);
+    
+    const days: Date[] = [];
+    const current = new Date(firstMonday);
+    
+    while (current <= endDate) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return {
+      days,
+      firstMonday: new Date(firstMonday),
+      daysBeforeMonday: daysToMonday
+    };
+  };
+
+  // Process heatmap data when dayGroups change
+  const processedHeatmapData = useMemo(() => {
+    if (dayGroups.length === 0) return null;
+    
+    const { days: allDays, firstMonday, daysBeforeMonday } = generateYearRange();
+    const now = new Date();
+    const ukToday = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+    ukToday.setHours(0, 0, 0, 0);
+    
+    // Create a map of date strings to pushup counts
+    const pushupMap = new Map<string, number>();
+    let maxDaily = 0;
+    let lifetime = 0;
+    
+    dayGroups.forEach(dayGroup => {
+      const dateKey = dayGroup.date.toISOString().split('T')[0];
+      pushupMap.set(dateKey, dayGroup.total);
+      if (dayGroup.total > maxDaily) {
+        maxDaily = dayGroup.total;
+      }
+      lifetime += dayGroup.total;
+    });
+    
+    // Also check individual submissions for max daily calculation
+    dayGroups.forEach(dayGroup => {
+      dayGroup.submissions.forEach(sub => {
+        if (sub.count > maxDaily) {
+          maxDaily = sub.count;
+        }
+      });
+    });
+    
+    // Process heatmap days
+    const heatmapData: HeatmapDay[] = allDays.map(date => {
+      const dateKey = date.toISOString().split('T')[0];
+      const ukDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+      ukDate.setHours(0, 0, 0, 0);
+      
+      const isFuture = ukDate > ukToday;
+      const isToday = ukDate.getTime() === ukToday.getTime();
+      const count = pushupMap.get(dateKey) || 0;
+      
+      return {
+        date: ukDate,
+        count,
+        isFuture,
+        isToday,
+      };
+    });
+    
+    // Create week-based grid structure: grid[dayOfWeek][weekIndex]
+    // Calculate total weeks needed - ensure we have complete weeks
+    // Since we start from first Monday, we need to ensure all weeks are complete
+    const totalWeeks = Math.ceil(heatmapData.length / 7);
+    const weekGrid: (HeatmapDay | null)[][] = [];
+    
+    // Initialize grid: 7 rows (days of week) × totalWeeks columns
+    for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+      weekGrid[dayOfWeek] = [];
+      for (let weekIndex = 0; weekIndex < totalWeeks; weekIndex++) {
+        weekGrid[dayOfWeek][weekIndex] = null;
+      }
+    }
+    
+    // Fill grid with days - each day goes to its correct dayOfWeek row and weekIndex column
+    // Days are sequential, so we assign them to weeks based on their index
+    heatmapData.forEach((day, index) => {
+      const dayOfWeek = day.date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      const weekIndex = Math.floor(index / 7); // Which week this day belongs to (0-based)
+      
+      // Ensure weekIndex is within bounds
+      if (weekIndex < totalWeeks) {
+        weekGrid[dayOfWeek][weekIndex] = day;
+      }
+    });
+    
+    // Verify grid completeness - ensure all expected weeks have at least some days
+    for (let weekIndex = 0; weekIndex < totalWeeks; weekIndex++) {
+      let hasDays = false;
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        if (weekGrid[dayOfWeek]?.[weekIndex]) {
+          hasDays = true;
+          break;
+        }
+      }
+      // Only warn if this week should have data (within the range of heatmapData)
+      if (!hasDays && weekIndex < Math.floor(heatmapData.length / 7)) {
+        console.warn(`Week ${weekIndex} has no days but should have data`);
+      }
+    }
+    
+    // Calculate monthly stats for ALL months (including future)
+    const monthlyMap = new Map<string, MonthlyStats>();
+    
+    heatmapData.forEach(day => {
+      const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+      const existing = monthlyMap.get(monthKey) || { total: 0, maxSet: 0 };
+      
+      // Only add to total/maxSet if not future
+      if (!day.isFuture) {
+        monthlyMap.set(monthKey, {
+          total: existing.total + day.count,
+          maxSet: Math.max(existing.maxSet, day.count),
+        });
+      } else {
+        // Future month - ensure entry exists with zeros
+        monthlyMap.set(monthKey, { total: 0, maxSet: 0 });
+      }
+    });
+    
+    return {
+      weekGrid,
+      heatmapDays: heatmapData,
+      maxDailyPushups: maxDaily,
+      lifetimeTotal: lifetime,
+      monthlyStats: monthlyMap,
+      totalWeeks,
+      daysBeforeMonday,
+    };
+  }, [dayGroups]);
+
+  useEffect(() => {
+    if (processedHeatmapData) {
+      setWeekGrid(processedHeatmapData.weekGrid);
+      setHeatmapDays(processedHeatmapData.heatmapDays);
+      setMaxDailyPushups(processedHeatmapData.maxDailyPushups);
+      setLifetimeTotal(processedHeatmapData.lifetimeTotal);
+      setMonthlyStats(processedHeatmapData.monthlyStats);
+      setTotalWeeks(processedHeatmapData.totalWeeks);
+      setDaysBeforeMonday(processedHeatmapData.daysBeforeMonday);
+      
+      // Set initial visible month to current month (ensure it's always set)
+      const now = new Date();
+      const ukToday = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+      const currentMonthKey = `${ukToday.getFullYear()}-${ukToday.getMonth()}`;
+      // Only set if not already set or if current month is valid
+      if (!visibleMonth || processedHeatmapData.monthlyStats.has(currentMonthKey)) {
+        setVisibleMonth(currentMonthKey);
+      }
+    }
+  }, [processedHeatmapData]);
+
+  useEffect(() => {
+    if (todayRef.current && heatmapContainerRef.current) {
+      // Scroll to today on mount and detect initial visible month
+      setTimeout(() => {
+        todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        // Detect initial visible month after scroll
+        setTimeout(() => {
+          handleHeatmapScroll();
+        }, 300);
+      }, 100);
+    }
+  }, [heatmapDays, weekGrid, totalWeeks]);
+
 
   // Refresh data when page regains focus (e.g., when navigating back from another page)
   useEffect(() => {
@@ -63,6 +298,247 @@ export default function HistoryPage() {
     } else {
       setUser(currentUser);
     }
+  };
+
+  const fetchUserProfileColor = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('profile_color')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
+          setProfileColor('green');
+          return;
+        }
+        throw error;
+      }
+
+      setProfileColor(data?.profile_color || 'green');
+    } catch (error) {
+      console.error('Error fetching user profile color:', error);
+      setProfileColor('green');
+    }
+  };
+
+
+  // Get heatmap color classes based on profile color and intensity (opacity-based)
+  const getHeatmapColorClasses = (count: number, isFuture: boolean, isPastEmpty: boolean): string => {
+    if (isFuture) {
+      return 'bg-white dark:bg-gray-800';
+    }
+    
+    if (isPastEmpty) {
+      return 'bg-gray-200 dark:bg-gray-700';
+    }
+    
+    if (maxDailyPushups === 0) {
+      return 'bg-gray-200 dark:bg-gray-700';
+    }
+    
+    const percentage = (count / maxDailyPushups) * 100;
+    
+    // 5 intensity levels mapped to opacity
+    let opacityClass: string;
+    if (percentage <= 20) opacityClass = 'opacity-20';
+    else if (percentage <= 40) opacityClass = 'opacity-40';
+    else if (percentage <= 60) opacityClass = 'opacity-60';
+    else if (percentage <= 80) opacityClass = 'opacity-80';
+    else opacityClass = 'opacity-100';
+    
+    // Base color map (single color per profile color)
+    const baseColorMap: Record<string, string> = {
+      red: 'bg-red-600',
+      green: 'bg-green-600',
+      blue: 'bg-blue-600',
+      purple: 'bg-purple-600',
+      cyan: 'bg-cyan-600',
+      yellow: 'bg-yellow-600',
+    };
+    
+    const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+    
+    return `${baseColor} ${opacityClass}`;
+  };
+
+  // Throttle scroll handler
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle scroll to track visible month (leftmost visible column)
+  const handleHeatmapScroll = useCallback(() => {
+    if (!heatmapContainerRef.current || weekGrid.length === 0 || totalWeeks === 0) return;
+    
+    // Clear existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    
+    // Throttle scroll events for performance (reduced throttle for better responsiveness)
+    scrollTimeoutRef.current = setTimeout(() => {
+      const container = heatmapContainerRef.current;
+      if (!container || weekGrid.length === 0 || totalWeeks === 0) return;
+      
+      const scrollLeft = container.scrollLeft;
+      const containerRect = container.getBoundingClientRect();
+      
+      // Find the leftmost visible square by checking DOM positions
+      // Check all squares, including those partially visible
+      const squares = container.querySelectorAll('[data-date-key]');
+      let leftmostSquare: Element | null = null;
+      let leftmostScrollPosition = Infinity;
+      
+      squares.forEach(square => {
+        const rect = square.getBoundingClientRect();
+        // Check if square is visible (right edge is past container left, left edge is before container right)
+        // This includes partially visible squares
+        if (rect.right >= containerRect.left && rect.left <= containerRect.right) {
+          // Use scrollLeft position relative to the square's position in the document
+          // Calculate the square's position relative to scroll container
+          const squareScrollLeft = rect.left - containerRect.left + scrollLeft;
+          if (squareScrollLeft < leftmostScrollPosition) {
+            leftmostScrollPosition = squareScrollLeft;
+            leftmostSquare = square;
+          }
+        }
+      });
+      
+      // If we found a square, get its date and determine month
+      if (leftmostSquare) {
+        const dateKey = leftmostSquare.getAttribute('data-date-key');
+        if (dateKey) {
+          try {
+            const date = new Date(dateKey);
+            const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+            setVisibleMonth(monthKey);
+            return;
+          } catch (e) {
+            console.error('Error parsing date:', e);
+          }
+        }
+      }
+      
+      // Fallback: Calculate based on scroll position using weekGrid
+      // Account for container padding: -mx-4 px-4 means content starts 16px in
+      const containerPadding = 16; // px-4 = 16px
+      const adjustedScrollLeft = Math.max(0, scrollLeft - containerPadding);
+      
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+      const squareSize = isMobile ? 16 : 12;
+      const gapSize = 2;
+      const weekWidth = (squareSize * 7) + (gapSize * 6);
+      
+      // Calculate which week is at the leftmost visible position
+      const leftmostWeekIndex = Math.floor(adjustedScrollLeft / weekWidth);
+      const validWeekIndex = Math.max(0, Math.min(leftmostWeekIndex, totalWeeks - 1));
+      
+      // Try all 7 days of week to find a valid day (start from Monday for better accuracy)
+      let foundMonth = false;
+      for (let dayOfWeek = 1; dayOfWeek < 7; dayOfWeek++) {
+        const day = weekGrid[dayOfWeek]?.[validWeekIndex];
+        if (day) {
+          const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+          setVisibleMonth(monthKey);
+          foundMonth = true;
+          break;
+        }
+      }
+      // Try Sunday if not found yet
+      if (!foundMonth) {
+        const day = weekGrid[0]?.[validWeekIndex];
+        if (day) {
+          const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+          setVisibleMonth(monthKey);
+          foundMonth = true;
+        }
+      }
+      
+      // If still no month found, try adjacent weeks
+      if (!foundMonth) {
+        // Try week before (left)
+        for (let offset = 1; offset <= 2 && validWeekIndex - offset >= 0; offset++) {
+          for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+            const day = weekGrid[dayOfWeek]?.[validWeekIndex - offset];
+            if (day) {
+              const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+              setVisibleMonth(monthKey);
+              return;
+            }
+          }
+        }
+        // Try week after (right)
+        for (let offset = 1; offset <= 2 && validWeekIndex + offset < totalWeeks; offset++) {
+          for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+            const day = weekGrid[dayOfWeek]?.[validWeekIndex + offset];
+            if (day) {
+              const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+              setVisibleMonth(monthKey);
+              return;
+            }
+          }
+        }
+        // Final fallback: Use current month if no day found
+        const now = new Date();
+        const ukDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+        const currentMonthKey = `${ukDate.getFullYear()}-${ukDate.getMonth()}`;
+        setVisibleMonth(currentMonthKey);
+      }
+    }, 16); // Throttle to ~60fps for smoother updates
+  }, [weekGrid, totalWeeks]);
+
+  // Attach scroll listener directly to ensure it works
+  useEffect(() => {
+    const container = heatmapContainerRef.current;
+    if (!container) return;
+
+    // Add scroll event listener
+    container.addEventListener('scroll', handleHeatmapScroll, { passive: true });
+    
+    // Initial detection
+    handleHeatmapScroll();
+
+    return () => {
+      container.removeEventListener('scroll', handleHeatmapScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [handleHeatmapScroll]);
+
+  // Also detect initial month when weekGrid is ready
+  useEffect(() => {
+    if (weekGrid.length > 0 && totalWeeks > 0 && heatmapContainerRef.current) {
+      handleHeatmapScroll();
+    }
+  }, [weekGrid, totalWeeks, handleHeatmapScroll]);
+
+  // Format month name for display (full format like "January 2026")
+  const formatMonthName = (monthKey: string): string => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const date = new Date(year, month, 1);
+    return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  };
+
+  // Format date for tooltip (e.g., "20th Jan 2026")
+  const formatDateForTooltip = (date: Date): string => {
+    const day = date.getDate();
+    const month = date.toLocaleDateString('en-GB', { month: 'short' });
+    const year = date.getFullYear();
+    
+    // Add ordinal suffix (st, nd, rd, th)
+    const getOrdinalSuffix = (n: number): string => {
+      const j = n % 10;
+      const k = n % 100;
+      if (j === 1 && k !== 11) return 'st';
+      if (j === 2 && k !== 12) return 'nd';
+      if (j === 3 && k !== 13) return 'rd';
+      return 'th';
+    };
+    
+    return `${day}${getOrdinalSuffix(day)} ${month} ${year}`;
   };
 
 
@@ -613,12 +1089,152 @@ export default function HistoryPage() {
           <div className="text-center py-12 text-gray-600 dark:text-gray-400">
             Loading history...
           </div>
-        ) : dayGroups.length === 0 ? (
-          <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-            No submissions yet. Start tracking your pushups on the Dashboard!
-          </div>
         ) : (
-          <div className="space-y-3">
+          <>
+            {/* Heatmap Section */}
+            {heatmapDays.length > 0 && (
+              <div className="mb-8">
+                {/* Heatmap Grid */}
+                <div className="mb-4 bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl border border-gray-200 dark:border-gray-800 p-4 relative overflow-visible">
+                  {/* Month Header - Fixed position inside card, updates based on scroll */}
+                  {weekGrid.length > 0 && totalWeeks > 0 && (() => {
+                    // Ensure we always have a valid month
+                    let displayMonth = visibleMonth;
+                    
+                    // Fallback to current month if visibleMonth is invalid or missing
+                    if (!displayMonth || !monthlyStats.has(displayMonth)) {
+                      const now = new Date();
+                      const ukDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+                      displayMonth = `${ukDate.getFullYear()}-${ukDate.getMonth()}`;
+                    }
+                    
+                    // Get stats (create with zeros if missing)
+                    const stats = monthlyStats.get(displayMonth) || { total: 0, maxSet: 0 };
+                    
+                    return (
+                      <div className="mb-2 flex justify-between items-start">
+                        <div className="text-left flex flex-col">
+                          <strong className="font-semibold text-lg text-black dark:text-white">
+                            {formatMonthName(displayMonth)}
+                          </strong>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            Total: {stats.total} Max Set: {stats.maxSet}
+                          </span>
+                        </div>
+                        {selectedDay && (
+                          <div className="text-right">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {selectedDay.count > 0 
+                                ? `${selectedDay.count}, ${formatDateForTooltip(selectedDay.date)}`
+                                : formatDateForTooltip(selectedDay.date)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Minimal spacer between month title and grid */}
+                  <div className="h-2"></div>
+
+                  <div
+                    ref={heatmapContainerRef}
+                    onScroll={handleHeatmapScroll}
+                    onMouseMove={handleHeatmapScroll}
+                    className="overflow-x-auto -mx-4 px-4 overflow-y-visible"
+                    style={{ WebkitOverflowScrolling: 'touch', overflowY: 'visible' }}
+                  >
+                    <div className="inline-block">
+
+                      {/* Grid: 7 rows for days of week, columns for weeks */}
+                      {weekGrid.length > 0 && totalWeeks > 0 && (
+                        <div className="flex flex-col gap-[2px] pb-2" style={{ position: 'relative' }}>
+                          {[1, 2, 3, 4, 5, 6, 0].map((dayOfWeek) => (
+                            <div key={dayOfWeek} className="flex gap-[2px]" style={{ position: 'relative' }}>
+                              {Array.from({ length: totalWeeks }, (_, weekIndex) => {
+                                const day = weekGrid[dayOfWeek]?.[weekIndex];
+                                
+                                if (!day) {
+                                  // Empty square - determine if it's before first Monday or after last day
+                                  // Calculate the expected sequential index for this position
+                                  const expectedDayIndex = weekIndex * 7 + dayOfWeek;
+                                  
+                                  // Check if this position is before the first Monday (should be transparent)
+                                  // The first day in heatmapDays is always a Monday (dayOfWeek = 1)
+                                  const firstDay = heatmapDays[0];
+                                  const isBeforeFirstMonday = firstDay && weekIndex === 0 && dayOfWeek < firstDay.date.getDay();
+                                  
+                                  // Check if this position is after the last day (future empty square)
+                                  const totalDaysGenerated = heatmapDays.length;
+                                  const isAfterLastDay = expectedDayIndex >= totalDaysGenerated;
+                                  
+                                  // If it's after the last day, it's a future empty square (white)
+                                  // If it's before first Monday, it should be transparent (no background)
+                                  const isFutureEmpty = isAfterLastDay && !isBeforeFirstMonday;
+                                  
+                                  return (
+                                    <div 
+                                      key={`empty-${dayOfWeek}-${weekIndex}`} 
+                                      className={`w-[16px] h-[16px] sm:w-[12px] sm:h-[12px] ${
+                                        isFutureEmpty ? 'bg-white dark:bg-gray-800' : ''
+                                      }`}
+                                    />
+                                  );
+                                }
+                                
+                                const dateKey = day.date.toISOString().split('T')[0];
+                                const isPastEmpty = !day.isFuture && day.count === 0;
+                                const colorClass = getHeatmapColorClasses(day.count, day.isFuture, isPastEmpty);
+                                
+                                return (
+                                  <div
+                                    key={dateKey}
+                                    ref={day.isToday ? todayRef : null}
+                                    data-date-key={dateKey}
+                                    className={`w-[16px] h-[16px] sm:w-[12px] sm:h-[12px] rounded-sm ${colorClass} ${
+                                      day.isToday ? 'border-2 border-black dark:border-white box-border' : ''
+                                    } group relative cursor-pointer transition-all hover:scale-110`}
+                                    style={{ position: 'relative' }}
+                                    onMouseEnter={() => setSelectedDay(day)}
+                                    onMouseLeave={() => setSelectedDay(null)}
+                                    onTouchStart={() => setSelectedDay(day)}
+                                  >
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lifetime Total */}
+                <div className="mb-6 text-left">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Lifetime Total: <span className="font-semibold">{lifetimeTotal.toLocaleString()}</span> pushups
+                  </p>
+                </div>
+
+                {/* Divider */}
+                <div className="py-4">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Existing History List */}
+            {dayGroups.length === 0 ? (
+              <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+                No submissions yet. Start tracking your pushups on the Dashboard!
+              </div>
+            ) : (
+              <div className="space-y-3">
             {dayGroups.map((dayGroup) => {
               const isExpanded = expandedDays.has(dayGroup.dateLabel);
 
@@ -805,7 +1421,9 @@ export default function HistoryPage() {
                 </div>
               );
             })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
