@@ -359,9 +359,10 @@ export default function LeaderboardPage() {
       setSelectedLeaderboardId(data.id);
       setShowCreateModal(false);
       setGeneratedCode(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating leaderboard:', error);
-      setActionError('Unable to create leaderboard. Please try again.');
+      const message = error?.message || 'Unable to create leaderboard. Please try again.';
+      setActionError(message);
     } finally {
       setActionLoading(false);
     }
