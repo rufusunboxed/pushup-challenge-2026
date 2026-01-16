@@ -168,7 +168,7 @@ export default function LeaderboardPage() {
         .eq('visibility', 'public')
         .order('created_at', { ascending: false });
 
-      let membershipsResult = await supabase
+      const membershipsResult = await supabase
         .from('leaderboard_members')
         .select(`
           leaderboard_id,
@@ -187,12 +187,14 @@ export default function LeaderboardPage() {
         .order('position', { ascending: true })
         .order('joined_at', { ascending: true });
 
-      if (membershipsResult.error) {
-        const isMissingColumn = membershipsResult.error.message?.includes('column') ||
-          membershipsResult.error.message?.includes('does not exist') ||
-          membershipsResult.error.code === '42703';
-        if (isMissingColumn) {
-          membershipsResult = await supabase
+      const missingColumn = membershipsResult.error && (
+        membershipsResult.error.message?.includes('column') ||
+        membershipsResult.error.message?.includes('does not exist') ||
+        membershipsResult.error.code === '42703'
+      );
+
+      const fallbackResult = missingColumn
+        ? await supabase
             .from('leaderboard_members')
             .select(`
               leaderboard_id,
@@ -205,20 +207,21 @@ export default function LeaderboardPage() {
                 created_at
               )
             `)
-            .eq('user_id', user.id);
-        }
-      }
+            .eq('user_id', user.id)
+        : null;
 
       const publicResult = await publicRequest;
 
       if (publicResult.error) throw publicResult.error;
 
-      const memberships = (membershipsResult.data || [])
+      const resolvedMemberships = (fallbackResult || membershipsResult).data || [];
+      const memberships = (resolvedMemberships as any[])
         .map((item: any) => item.leaderboards)
         .filter(Boolean) as LeaderboardMeta[];
 
-      if (membershipsResult.error) {
-        console.error('Error fetching memberships:', membershipsResult.error);
+      const membershipError = fallbackResult?.error || membershipsResult.error;
+      if (membershipError) {
+        console.error('Error fetching memberships:', membershipError);
         setUserLeaderboards([]);
         setActionError('Could not load your memberships. Please run the latest Supabase SQL updates.');
       } else {
