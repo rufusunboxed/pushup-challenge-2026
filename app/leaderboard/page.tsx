@@ -162,31 +162,54 @@ export default function LeaderboardPage() {
     setLeaderboardListLoading(true);
     setActionError(null);
     try {
-      const [membershipsResult, publicResult] = await Promise.all([
-        supabase
-          .from('leaderboard_members')
-          .select(`
-            leaderboard_id,
-            position,
-            joined_at,
-            leaderboards (
-              id,
-              code,
-              name,
-              visibility,
-              created_by,
-              created_at
-            )
-          `)
-          .eq('user_id', user.id)
-          .order('position', { ascending: true })
-          .order('joined_at', { ascending: true }),
-        supabase
-          .from('leaderboards')
-          .select('id, code, name, visibility, created_by, created_at')
-          .eq('visibility', 'public')
-          .order('created_at', { ascending: false })
-      ]);
+      const publicRequest = supabase
+        .from('leaderboards')
+        .select('id, code, name, visibility, created_by, created_at')
+        .eq('visibility', 'public')
+        .order('created_at', { ascending: false });
+
+      let membershipsResult = await supabase
+        .from('leaderboard_members')
+        .select(`
+          leaderboard_id,
+          position,
+          joined_at,
+          leaderboards (
+            id,
+            code,
+            name,
+            visibility,
+            created_by,
+            created_at
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('position', { ascending: true })
+        .order('joined_at', { ascending: true });
+
+      if (membershipsResult.error) {
+        const isMissingColumn = membershipsResult.error.message?.includes('column') ||
+          membershipsResult.error.message?.includes('does not exist') ||
+          membershipsResult.error.code === '42703';
+        if (isMissingColumn) {
+          membershipsResult = await supabase
+            .from('leaderboard_members')
+            .select(`
+              leaderboard_id,
+              leaderboards (
+                id,
+                code,
+                name,
+                visibility,
+                created_by,
+                created_at
+              )
+            `)
+            .eq('user_id', user.id);
+        }
+      }
+
+      const publicResult = await publicRequest;
 
       if (membershipsResult.error) throw membershipsResult.error;
       if (publicResult.error) throw publicResult.error;
@@ -258,6 +281,8 @@ export default function LeaderboardPage() {
 
       await fetchLeaderboardLists();
       setSelectedLeaderboardId(leaderboardId);
+      setShowJoinModal(false);
+      setJoinCode('');
     } catch (error) {
       console.error('Error joining leaderboard:', error);
       setActionError('Unable to join leaderboard. Please try again.');
@@ -285,8 +310,6 @@ export default function LeaderboardPage() {
       }
 
       await joinLeaderboardById(data.id);
-      setJoinCode('');
-      setShowJoinModal(false);
     } catch (error) {
       console.error('Error joining by code:', error);
       setActionError('Unable to join with this code.');
@@ -301,12 +324,13 @@ export default function LeaderboardPage() {
     setActionError(null);
     try {
       const code = await generateUniqueLeaderboardCode();
+      const visibility = newLeaderboardVisibility === 'private' ? 'private' : 'public';
       const { data, error } = await supabase
         .from('leaderboards')
         .insert({
           code,
           name: newLeaderboardName.trim(),
-          visibility: newLeaderboardVisibility,
+          visibility,
           created_by: user.id
         })
         .select('id')
@@ -324,6 +348,8 @@ export default function LeaderboardPage() {
       setNewLeaderboardName('');
       await fetchLeaderboardLists();
       setSelectedLeaderboardId(data.id);
+      setShowCreateModal(false);
+      setGeneratedCode(null);
     } catch (error) {
       console.error('Error creating leaderboard:', error);
       setActionError('Unable to create leaderboard. Please try again.');
@@ -832,7 +858,11 @@ export default function LeaderboardPage() {
                     if (dragActive) return;
                     setSelectedLeaderboardId(board.id);
                   }}
-                  onPointerDown={() => startLongPress(board.id)}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    startLongPress(board.id);
+                  }}
                   onPointerUp={finishDrag}
                   onPointerCancel={finishDrag}
                   onPointerLeave={() => {
@@ -845,11 +875,12 @@ export default function LeaderboardPage() {
                       moveLeaderboard(draggingId, board.id);
                     }
                   }}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all shrink-0 ${
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all shrink-0 select-none ${
                     selectedLeaderboardId === board.id
                       ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
                       : 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
                   } ${draggingId === board.id ? 'scale-105 shadow-md' : ''}`}
+                  style={{ touchAction: 'manipulation', WebkitUserSelect: 'none' }}
                 >
                   {board.name}
                 </button>
