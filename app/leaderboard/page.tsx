@@ -280,21 +280,29 @@ export default function LeaderboardPage() {
     setActionError(null);
     try {
       const nextPosition = userLeaderboards.length;
+      console.log('Inserting membership - leaderboardId:', leaderboardId, 'userId:', user.id, 'position:', nextPosition);
+      
       const { error } = await supabase
         .from('leaderboard_members')
         .insert({ leaderboard_id: leaderboardId, user_id: user.id, position: nextPosition });
 
-      if (error && !error.message?.includes('duplicate')) {
-        throw error;
+      if (error) {
+        console.error('INSERT error:', error);
+        if (!error.message?.includes('duplicate')) {
+          throw error;
+        }
+        // If duplicate, user is already a member - that's okay
+        console.log('User is already a member, continuing...');
       }
 
       await fetchLeaderboardLists();
       setSelectedLeaderboardId(leaderboardId);
       setShowJoinModal(false);
       setJoinCode('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error joining leaderboard:', error);
-      setActionError('Unable to join leaderboard. Please try again.');
+      const errorMessage = error?.message || 'Unable to join leaderboard. Please try again.';
+      setActionError(errorMessage);
     } finally {
       setActionLoading(false);
     }
@@ -306,22 +314,47 @@ export default function LeaderboardPage() {
     setActionError(null);
     try {
       const normalized = joinCode.trim().toUpperCase();
+      console.log('Attempting to join leaderboard with code:', normalized);
+      
+      const nextPosition = userLeaderboards.length;
+      
+      // Use the combined RPC function that handles the entire join process
       const { data, error } = await supabase
-        .from('leaderboards')
-        .select('id')
-        .eq('code', normalized)
-        .maybeSingle();
+        .rpc('join_leaderboard_by_code', { 
+          code_input: normalized,
+          position_input: nextPosition
+        });
 
-      if (error) throw error;
-      if (!data?.id) {
-        setActionError('Invalid code. Please check and try again.');
+      console.log('RPC response - data:', data, 'error:', error);
+      console.log('Full RPC response:', JSON.stringify({ data, error }, null, 2));
+
+      if (error) {
+        console.error('RPC error:', error);
+        throw error;
+      }
+      
+      // RPC returns JSON with success and leaderboard_id
+      if (!data || !data.success) {
+        const errorMsg = data?.error || 'Invalid code. Please check and try again.';
+        console.error('Join failed - debug info:', data);
+        console.error('Code searched:', normalized);
+        console.error('Debug codes in DB:', data?.debug_all_codes);
+        console.error('Total leaderboards:', data?.debug_total_leaderboards);
+        setActionError(errorMsg);
         return;
       }
 
-      await joinLeaderboardById(data.id);
-    } catch (error) {
+      const leaderboardId = data.leaderboard_id;
+      console.log('Successfully joined leaderboard ID:', leaderboardId);
+      
+      await fetchLeaderboardLists();
+      setSelectedLeaderboardId(leaderboardId);
+      setShowJoinModal(false);
+      setJoinCode('');
+    } catch (error: any) {
       console.error('Error joining by code:', error);
-      setActionError('Unable to join with this code.');
+      const errorMessage = error?.message || 'Unable to join with this code.';
+      setActionError(errorMessage);
     } finally {
       setActionLoading(false);
     }
