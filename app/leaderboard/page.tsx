@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { getCurrentMonthRange, getDaysInCurrentMonth, formatMonthYear, getCurrentDayRange } from '@/lib/date-utils';
 
 interface LeaderboardEntry {
@@ -21,6 +21,17 @@ interface DailyData {
   maxSet: number; // Highest single submission for this day
 }
 
+type LeaderboardVisibility = 'public' | 'private';
+
+interface LeaderboardMeta {
+  id: string;
+  code: string;
+  name: string;
+  visibility: LeaderboardVisibility;
+  created_by: string | null;
+  created_at: string;
+}
+
 export default function LeaderboardPage() {
   const router = useRouter();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -33,6 +44,22 @@ export default function LeaderboardPage() {
   const [userProfileColors, setUserProfileColors] = useState<Map<string, string>>(new Map());
   const [selectedDayByUser, setSelectedDayByUser] = useState<Map<string, {day: number, count: number, date: Date}>>(new Map());
   const [userMaxDailyInMonth, setUserMaxDailyInMonth] = useState<Map<string, number>>(new Map());
+  const [userLeaderboards, setUserLeaderboards] = useState<LeaderboardMeta[]>([]);
+  const [publicLeaderboards, setPublicLeaderboards] = useState<LeaderboardMeta[]>([]);
+  const [selectedLeaderboardId, setSelectedLeaderboardId] = useState<string | null>(null);
+  const [leaderboardListLoading, setLeaderboardListLoading] = useState(true);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [newLeaderboardName, setNewLeaderboardName] = useState('');
+  const [newLeaderboardVisibility, setNewLeaderboardVisibility] = useState<LeaderboardVisibility>('public');
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const longPressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -40,10 +67,20 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     if (user) {
-      fetchLeaderboard();
+      fetchLeaderboardLists();
       fetchUserProfileColor();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user && selectedLeaderboardId) {
+      fetchLeaderboard(selectedLeaderboardId);
+    }
+    if (user && !selectedLeaderboardId) {
+      setLeaderboard([]);
+      setLoading(false);
+    }
+  }, [user, selectedLeaderboardId]);
 
   useEffect(() => {
     if (leaderboard.length > 0) {
@@ -120,6 +157,276 @@ export default function LeaderboardPage() {
     }
   };
 
+  const fetchLeaderboardLists = async () => {
+    if (!user) return;
+    setLeaderboardListLoading(true);
+    setActionError(null);
+    try {
+      const [membershipsResult, publicResult] = await Promise.all([
+        supabase
+          .from('leaderboard_members')
+          .select(`
+            leaderboard_id,
+            position,
+            joined_at,
+            leaderboards (
+              id,
+              code,
+              name,
+              visibility,
+              created_by,
+              created_at
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('position', { ascending: true })
+          .order('joined_at', { ascending: true }),
+        supabase
+          .from('leaderboards')
+          .select('id, code, name, visibility, created_by, created_at')
+          .eq('visibility', 'public')
+          .order('created_at', { ascending: false })
+      ]);
+
+      if (membershipsResult.error) throw membershipsResult.error;
+      if (publicResult.error) throw publicResult.error;
+
+      const memberships = (membershipsResult.data || [])
+        .map((item: any) => item.leaderboards)
+        .filter(Boolean) as LeaderboardMeta[];
+
+      setUserLeaderboards(memberships);
+      setPublicLeaderboards((publicResult.data || []) as LeaderboardMeta[]);
+
+      if (memberships.length === 0) {
+        setSelectedLeaderboardId(null);
+      } else if (!selectedLeaderboardId) {
+        setSelectedLeaderboardId(memberships[0].id);
+      } else if (!memberships.some(board => board.id === selectedLeaderboardId)) {
+        setSelectedLeaderboardId(memberships[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching leaderboards:', error);
+      setActionError('Could not load leaderboards. Please try again.');
+    } finally {
+      setLeaderboardListLoading(false);
+    }
+  };
+
+  const generateLeaderboardCode = (): string => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i += 1) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  };
+
+  const generateUniqueLeaderboardCode = async (): Promise<string> => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = generateLeaderboardCode();
+      const { data, error } = await supabase
+        .from('leaderboards')
+        .select('id')
+        .eq('code', candidate)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (!data) {
+        return candidate;
+      }
+    }
+    throw new Error('Unable to generate a unique code. Please try again.');
+  };
+
+  const joinLeaderboardById = async (leaderboardId: string) => {
+    if (!user) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const nextPosition = userLeaderboards.length;
+      const { error } = await supabase
+        .from('leaderboard_members')
+        .insert({ leaderboard_id: leaderboardId, user_id: user.id, position: nextPosition });
+
+      if (error && !error.message?.includes('duplicate')) {
+        throw error;
+      }
+
+      await fetchLeaderboardLists();
+      setSelectedLeaderboardId(leaderboardId);
+    } catch (error) {
+      console.error('Error joining leaderboard:', error);
+      setActionError('Unable to join leaderboard. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const joinLeaderboardByCode = async () => {
+    if (!user || !joinCode.trim()) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const normalized = joinCode.trim().toUpperCase();
+      const { data, error } = await supabase
+        .from('leaderboards')
+        .select('id')
+        .eq('code', normalized)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data?.id) {
+        setActionError('Invalid code. Please check and try again.');
+        return;
+      }
+
+      await joinLeaderboardById(data.id);
+      setJoinCode('');
+      setShowJoinModal(false);
+    } catch (error) {
+      console.error('Error joining by code:', error);
+      setActionError('Unable to join with this code.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const createLeaderboard = async () => {
+    if (!user || !newLeaderboardName.trim()) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const code = await generateUniqueLeaderboardCode();
+      const { data, error } = await supabase
+        .from('leaderboards')
+        .insert({
+          code,
+          name: newLeaderboardName.trim(),
+          visibility: newLeaderboardVisibility,
+          created_by: user.id
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      if (!data?.id) throw new Error('Failed to create leaderboard.');
+
+      const nextPosition = userLeaderboards.length;
+      await supabase
+        .from('leaderboard_members')
+        .insert({ leaderboard_id: data.id, user_id: user.id, position: nextPosition });
+
+      setGeneratedCode(code);
+      setNewLeaderboardName('');
+      await fetchLeaderboardLists();
+      setSelectedLeaderboardId(data.id);
+    } catch (error) {
+      console.error('Error creating leaderboard:', error);
+      setActionError('Unable to create leaderboard. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCopyCode = async (code: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code);
+      }
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 1500);
+    } catch (error) {
+      console.error('Error copying code:', error);
+    }
+  };
+
+  const handleLeaveLeaderboard = async () => {
+    if (!user || !selectedLeaderboardId) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const { error } = await supabase
+        .from('leaderboard_members')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('leaderboard_id', selectedLeaderboardId);
+
+      if (error) throw error;
+
+      await fetchLeaderboardLists();
+    } catch (error) {
+      console.error('Error leaving leaderboard:', error);
+      setActionError('Unable to leave leaderboard. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const moveLeaderboard = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setUserLeaderboards(prev => {
+      const fromIndex = prev.findIndex(board => board.id === fromId);
+      const toIndex = prev.findIndex(board => board.id === toId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const persistLeaderboardOrder = async (orderedBoards: LeaderboardMeta[]) => {
+    if (!user) return;
+    try {
+      await Promise.all(
+        orderedBoards.map((board, index) =>
+          supabase
+            .from('leaderboard_members')
+            .update({ position: index })
+            .eq('user_id', user.id)
+            .eq('leaderboard_id', board.id)
+        )
+      );
+    } catch (error) {
+      console.error('Error saving leaderboard order:', error);
+      setActionError('Unable to save leaderboard order. Please try again.');
+    }
+  };
+
+  const startLongPress = (boardId: string) => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = window.setTimeout(() => {
+      setDraggingId(boardId);
+      setDragActive(true);
+    }, 250);
+  };
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const finishDrag = async () => {
+    clearLongPress();
+    if (!draggingId) {
+      setDragActive(false);
+      return;
+    }
+    const currentOrder = [...userLeaderboards];
+    await persistLeaderboardOrder(currentOrder);
+    setDraggingId(null);
+    setDragActive(false);
+  };
+
   const checkUser = async () => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) {
@@ -130,9 +437,23 @@ export default function LeaderboardPage() {
   };
 
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = async (leaderboardId: string) => {
     try {
       setLoading(true);
+      setActionError(null);
+
+      const { data: members, error: membersError } = await supabase
+        .from('leaderboard_members')
+        .select('user_id')
+        .eq('leaderboard_id', leaderboardId);
+
+      if (membersError) throw membersError;
+
+      const memberIds = (members || []).map(member => member.user_id);
+      if (memberIds.length === 0) {
+        setLeaderboard([]);
+        return;
+      }
       
       // Fetch all profiles - try with display_name, fallback to basic columns if it doesn't exist
       let profiles: any[] = [];
@@ -159,6 +480,8 @@ export default function LeaderboardPage() {
         profiles = resultWithDisplay.data || [];
       }
 
+      profiles = profiles.filter(profile => memberIds.includes(profile.id));
+
       const { dayStart, dayEnd } = getCurrentDayRange();
       const { monthStart, monthEnd } = getCurrentMonthRange();
 
@@ -172,8 +495,8 @@ export default function LeaderboardPage() {
       // Calculate stats for each user
       const entries: LeaderboardEntry[] = profiles.map((profile: any) => {
         const userLogs = logs.filter((log) => log.user_id === profile.id);
-        // Use display_name if available, otherwise fall back to first_name + last_name
-        const defaultName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+        // Use display_name if available, otherwise fall back to first_name only
+        const defaultName = `${profile.first_name || ''}`.trim();
         const fullName = profile.display_name || defaultName || 'Unknown User';
 
         // Monthly total (current month)
@@ -459,6 +782,14 @@ export default function LeaderboardPage() {
     return colorMap[color] || colorMap.green;
   };
 
+  const memberLeaderboardIds = new Set(userLeaderboards.map(board => board.id));
+  const allUsersLeaderboard = publicLeaderboards.find(board => board.code === 'ALLUSERS');
+  const joinablePublicLeaderboards = publicLeaderboards.filter(board => !memberLeaderboardIds.has(board.id));
+  const availablePublicLeaderboards = publicLeaderboards.filter(board =>
+    board.code !== 'ALLUSERS' && !memberLeaderboardIds.has(board.id)
+  );
+  const selectedLeaderboardMeta = userLeaderboards.find(board => board.id === selectedLeaderboardId) || null;
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
@@ -481,134 +812,237 @@ export default function LeaderboardPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-            Loading leaderboard...
-          </div>
-        ) : leaderboard.length === 0 ? (
-          <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-            No entries yet. Be the first!
-          </div>
-        ) : (
-          <>
-            {/* Tab Filter UI */}
-            <div className="mb-6 bg-gray-100 dark:bg-[#2a2a2a] rounded-2xl p-1.5 flex gap-1.5">
-              <button
-                onClick={() => handleSortChange('monthly')}
-                className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
-                  sortBy === 'monthly'
-                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                }`}
-              >
-                Monthly Total
-              </button>
-              <button
-                onClick={() => handleSortChange('daily')}
-                className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
-                  sortBy === 'daily'
-                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                }`}
-              >
-                Daily Total
-              </button>
-              <button
-                onClick={() => handleSortChange('maxSet')}
-                className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
-                  sortBy === 'maxSet'
-                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                }`}
-              >
-                Max Set
-              </button>
+        <div className="mb-6 space-y-4">
+          {actionError && (
+            <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              {actionError}
             </div>
+          )}
 
-            <div className="space-y-3">
-              {(() => {
-                const { active, inactive } = splitActiveAndInactive();
-                
-                return (
-                  <>
-                    {/* Active Users */}
-                    {active.map((entry, index) => {
-                      const isExpanded = expandedUsers.has(entry.user_id);
-                      const chartData = userChartData.get(entry.user_id) || [];
-                      const medalEmoji = getMedalEmoji(index);
+          {leaderboardListLoading ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Loading leaderboards...
+            </div>
+          ) : userLeaderboards.length > 0 ? (
+            <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-2 -mx-4 px-4">
+              {userLeaderboards.map(board => (
+                <button
+                  key={board.id}
+                  onClick={() => {
+                    if (dragActive) return;
+                    setSelectedLeaderboardId(board.id);
+                  }}
+                  onPointerDown={() => startLongPress(board.id)}
+                  onPointerUp={finishDrag}
+                  onPointerCancel={finishDrag}
+                  onPointerLeave={() => {
+                    if (!draggingId) {
+                      clearLongPress();
+                    }
+                  }}
+                  onPointerEnter={() => {
+                    if (draggingId) {
+                      moveLeaderboard(draggingId, board.id);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all shrink-0 ${
+                    selectedLeaderboardId === board.id
+                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                      : 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
+                  } ${draggingId === board.id ? 'scale-105 shadow-md' : ''}`}
+                >
+                  {board.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {allUsersLeaderboard && (
+                <div className="inline-flex flex-col items-start gap-2 rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#2a2a2a] p-4">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Join All Users
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    Opt in to see the main leaderboard.
+                  </div>
+                  <button
+                    onClick={() => joinLeaderboardById(allUsersLeaderboard.id)}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold bg-black dark:bg-white text-white dark:text-black"
+                  >
+                    Join
+                  </button>
+                </div>
+              )}
 
-                      // Check if this is the current user's card
-                      const isCurrentUser = entry.user_id === user.id;
-                      const colorClasses = isCurrentUser ? getProfileColorClasses(userProfileColor) : null;
-
-                      return (
-                        <div
-                          key={entry.user_id}
-                          className={`rounded-2xl border overflow-hidden ${
-                            isCurrentUser && colorClasses
-                              ? `${colorClasses.bg} ${colorClasses.border}` 
-                              : 'bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-800'
-                          }`}
-                        >
-                          <div className="p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full text-white dark:text-black flex items-center justify-center font-semibold text-sm ${
-                                  isCurrentUser && colorClasses
-                                    ? colorClasses.badge
-                                    : 'bg-black dark:bg-white'
-                                }`}>
-                                  {index + 1}
-                                </div>
-                                <h3 className="font-semibold text-lg text-black dark:text-white flex items-center gap-2">
-                                  {entry.full_name}
-                                  {medalEmoji && <span className="text-2xl">{medalEmoji}</span>}
-                                </h3>
-                              </div>
-                              <button
-                                onClick={() => toggleUserChart(entry.user_id)}
-                                className="p-2 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg transition-colors"
-                                aria-label={isExpanded ? 'Collapse chart' : 'Expand chart'}
-                              >
-                                <ChevronDown 
-                                  className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform duration-300 ease-in-out ${
-                                    isExpanded ? 'rotate-180' : 'rotate-0'
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <p className="text-gray-600 dark:text-gray-400 mb-1">Monthly Total</p>
-                                <p className="font-semibold text-black dark:text-white text-lg">
-                                  {entry.monthly_total}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600 dark:text-gray-400 mb-1">Daily Total</p>
-                                <p className="font-semibold text-black dark:text-white text-lg">
-                                  {entry.daily_total}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-yellow-500 dark:text-yellow-400 mb-1">Max Set</p>
-                                <div className="flex items-baseline gap-2">
-                                  <p className="font-semibold text-black dark:text-white text-lg">
-                                    {entry.max_set}
-                                  </p>
-                                  {entry.max_set_date && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-500">
-                                      {entry.max_set_date.toLocaleDateString('en-GB', { 
-                                        day: 'numeric', 
-                                        month: 'short',
-                                        timeZone: 'Europe/London'
-                                      })}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Public leaderboards
+                </div>
+                {availablePublicLeaderboards.length === 0 ? (
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    No public leaderboards available yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {availablePublicLeaderboards.map(board => (
+                      <div
+                        key={board.id}
+                        className="flex items-center justify-between rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1f1f1f] px-4 py-3"
+                      >
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {board.name}
                           </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            Public leaderboard
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => joinLeaderboardById(board.id)}
+                          disabled={actionLoading}
+                          className="px-3 py-1.5 rounded-full text-xs font-semibold bg-black dark:bg-white text-white dark:text-black"
+                        >
+                          Join
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {selectedLeaderboardId ? (
+          loading ? (
+            <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+              Loading leaderboard...
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+              No entries yet. Be the first!
+            </div>
+          ) : (
+            <>
+              {/* Tab Filter UI */}
+              <div className="mb-6 bg-gray-100 dark:bg-[#2a2a2a] rounded-2xl p-1.5 flex gap-1.5">
+                <button
+                  onClick={() => handleSortChange('monthly')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
+                    sortBy === 'monthly'
+                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
+                  }`}
+                >
+                  Monthly Total
+                </button>
+                <button
+                  onClick={() => handleSortChange('daily')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
+                    sortBy === 'daily'
+                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
+                  }`}
+                >
+                  Daily Total
+                </button>
+                <button
+                  onClick={() => handleSortChange('maxSet')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
+                    sortBy === 'maxSet'
+                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
+                  }`}
+                >
+                  Max Set
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {(() => {
+                  const { active, inactive } = splitActiveAndInactive();
+                  
+                  return (
+                    <>
+                      {/* Active Users */}
+                      {active.map((entry, index) => {
+                        const isExpanded = expandedUsers.has(entry.user_id);
+                        const chartData = userChartData.get(entry.user_id) || [];
+                        const medalEmoji = getMedalEmoji(index);
+
+                        // Check if this is the current user's card
+                        const isCurrentUser = entry.user_id === user.id;
+                        const colorClasses = isCurrentUser ? getProfileColorClasses(userProfileColor) : null;
+
+                        return (
+                          <div
+                            key={entry.user_id}
+                            className={`rounded-2xl border overflow-hidden ${
+                              isCurrentUser && colorClasses
+                                ? `${colorClasses.bg} ${colorClasses.border}` 
+                                : 'bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-800'
+                            }`}
+                          >
+                            <div className="p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-full text-white dark:text-black flex items-center justify-center font-semibold text-sm ${
+                                    isCurrentUser && colorClasses
+                                      ? colorClasses.badge
+                                      : 'bg-black dark:bg-white'
+                                  }`}>
+                                    {index + 1}
+                                  </div>
+                                  <h3 className="font-semibold text-lg text-black dark:text-white flex items-center gap-2">
+                                    {entry.full_name}
+                                    {medalEmoji && <span className="text-2xl">{medalEmoji}</span>}
+                                  </h3>
+                                </div>
+                                <button
+                                  onClick={() => toggleUserChart(entry.user_id)}
+                                  className="p-2 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg transition-colors"
+                                  aria-label={isExpanded ? 'Collapse chart' : 'Expand chart'}
+                                >
+                                  <ChevronDown 
+                                    className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform duration-300 ease-in-out ${
+                                      isExpanded ? 'rotate-180' : 'rotate-0'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                  <p className="text-gray-600 dark:text-gray-400 mb-1">Monthly Total</p>
+                                  <p className="font-semibold text-black dark:text-white text-lg">
+                                    {entry.monthly_total}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-600 dark:text-gray-400 mb-1">Daily Total</p>
+                                  <p className="font-semibold text-black dark:text-white text-lg">
+                                    {entry.daily_total}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-yellow-500 dark:text-yellow-400 mb-1">Max Set</p>
+                                  <div className="flex items-baseline gap-2">
+                                    <p className="font-semibold text-black dark:text-white text-lg">
+                                      {entry.max_set}
+                                    </p>
+                                    {entry.max_set_date && (
+                                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                                        {entry.max_set_date.toLocaleDateString('en-GB', { 
+                                          day: 'numeric', 
+                                          month: 'short',
+                                          timeZone: 'Europe/London'
+                                        })}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
 
                           {/* Collapsible Chart Section */}
                           <div 
@@ -783,11 +1217,234 @@ export default function LeaderboardPage() {
                         </div>
                       );
                     })}
-                  </>
-                );
-              })()}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {selectedLeaderboardMeta && (
+                <div className="mt-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#2a2a2a] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Share this code to add new users
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {selectedLeaderboardMeta.code}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleCopyCode(selectedLeaderboardMeta.code)}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold bg-black dark:bg-white text-white dark:text-black"
+                    >
+                      {copiedCode ? 'Copied!' : 'Copy code'}
+                    </button>
+                    <button
+                      onClick={handleLeaveLeaderboard}
+                      disabled={actionLoading}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold bg-red-600 text-white"
+                    >
+                      Leave leaderboard
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        ) : (
+          <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+            Join a leaderboard to view rankings.
+          </div>
+        )}
+
+        <div className="mt-8">
+          <div className="relative py-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
             </div>
-          </>
+            <div className="relative flex justify-center">
+              <span className="bg-white dark:bg-[#1a1a1a] px-4 text-sm text-gray-500 dark:text-gray-400">
+                Want another leaderboard?
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={() => {
+                setShowJoinModal(true);
+                setActionError(null);
+              }}
+              className="flex-1 px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2a2a]"
+            >
+              Join a leaderboard
+            </button>
+            <button
+              onClick={() => {
+                setShowCreateModal(true);
+                setGeneratedCode(null);
+                setActionError(null);
+              }}
+              className="flex-1 px-4 py-3 rounded-2xl bg-black dark:bg-white text-white dark:text-black text-sm font-semibold"
+            >
+              Create a leaderboard
+            </button>
+          </div>
+        </div>
+
+        {showJoinModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#1a1a1a] p-6 shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Join a leaderboard
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Enter the 6-character code to join a private leaderboard.
+              </p>
+              {actionError && (
+                <div className="mb-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+                  {actionError}
+                </div>
+              )}
+              {joinablePublicLeaderboards.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    Public leaderboards
+                  </div>
+                  <div className="space-y-2">
+                    {joinablePublicLeaderboards.map(board => (
+                      <div
+                        key={board.id}
+                        className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#2a2a2a] px-3 py-2"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {board.name}
+                          </div>
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                            Public
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            joinLeaderboardById(board.id);
+                            setShowJoinModal(false);
+                          }}
+                          disabled={actionLoading}
+                          className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-black dark:bg-white text-white dark:text-black"
+                        >
+                          Join
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input
+                value={joinCode}
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                placeholder="Enter code"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none"
+              />
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowJoinModal(false);
+                    setJoinCode('');
+                    setActionError(null);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={joinLeaderboardByCode}
+                  disabled={actionLoading || joinCode.trim().length === 0}
+                  className="flex-1 px-4 py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-sm font-semibold"
+                >
+                  Join
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#1a1a1a] p-6 shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Create a leaderboard
+              </h3>
+              {actionError && (
+                <div className="mb-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+                  {actionError}
+                </div>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-gray-600 dark:text-gray-400">
+                    Leaderboard name
+                  </label>
+                  <input
+                    value={newLeaderboardName}
+                    onChange={(event) => setNewLeaderboardName(event.target.value)}
+                    placeholder="My crew"
+                    className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600 dark:text-gray-400">
+                    Visibility
+                  </label>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => setNewLeaderboardVisibility('public')}
+                      className={`flex-1 px-3 py-2 rounded-xl text-sm font-semibold ${
+                        newLeaderboardVisibility === 'public'
+                          ? 'bg-black dark:bg-white text-white dark:text-black'
+                          : 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      Public
+                    </button>
+                    <button
+                      onClick={() => setNewLeaderboardVisibility('private')}
+                      className={`flex-1 px-3 py-2 rounded-xl text-sm font-semibold ${
+                        newLeaderboardVisibility === 'private'
+                          ? 'bg-black dark:bg-white text-white dark:text-black'
+                          : 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      Private
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#2a2a2a] px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
+                  {generatedCode
+                    ? `Share this code: ${generatedCode}`
+                    : 'A 6-character code will be generated on create.'}
+                </div>
+              </div>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setGeneratedCode(null);
+                    setActionError(null);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={createLeaderboard}
+                  disabled={actionLoading || newLeaderboardName.trim().length === 0}
+                  className="flex-1 px-4 py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-sm font-semibold"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

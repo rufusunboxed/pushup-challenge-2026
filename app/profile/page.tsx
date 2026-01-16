@@ -29,6 +29,14 @@ const PROFILE_COLORS = [
   { name: 'slate', label: 'Slate', bg: 'bg-slate-600', darkBg: 'bg-slate-500' },
 ] as const;
 
+interface OwnedLeaderboard {
+  id: string;
+  name: string;
+  code: string;
+  visibility: 'public' | 'private';
+  created_at: string;
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -45,6 +53,9 @@ export default function ProfilePage() {
   const [colorSaving, setColorSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [ownedLeaderboards, setOwnedLeaderboards] = useState<OwnedLeaderboard[]>([]);
+  const [ownedLoading, setOwnedLoading] = useState(false);
+  const [ownedDeletingId, setOwnedDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -53,6 +64,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (user) {
       fetchProfile();
+      fetchOwnedLeaderboards();
     }
   }, [user]);
 
@@ -121,6 +133,54 @@ export default function ProfilePage() {
       if (!error.message?.includes('column') && !error.message?.includes('does not exist')) {
         setError('Failed to load profile. Please refresh the page.');
       }
+    }
+  };
+
+  const fetchOwnedLeaderboards = async () => {
+    if (!user) return;
+    setOwnedLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('leaderboards')
+        .select('id, name, code, visibility, created_at')
+        .eq('created_by', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOwnedLeaderboards((data || []) as OwnedLeaderboard[]);
+    } catch (error: any) {
+      console.error('Error fetching owned leaderboards:', error);
+      setError(error.message || 'Failed to load owned leaderboards');
+    } finally {
+      setOwnedLoading(false);
+    }
+  };
+
+  const handleDeleteOwnedLeaderboard = async (leaderboardId: string) => {
+    if (!user) return;
+    const confirmDelete = window.confirm('Delete this leaderboard? This cannot be undone.');
+    if (!confirmDelete) return;
+
+    setOwnedDeletingId(leaderboardId);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error } = await supabase
+        .from('leaderboards')
+        .delete()
+        .eq('id', leaderboardId)
+        .eq('created_by', user.id);
+
+      if (error) throw error;
+
+      setOwnedLeaderboards(prev => prev.filter(board => board.id !== leaderboardId));
+      setSuccess('Leaderboard deleted successfully');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error: any) {
+      console.error('Error deleting leaderboard:', error);
+      setError(error.message || 'Failed to delete leaderboard');
+    } finally {
+      setOwnedDeletingId(null);
     }
   };
 
@@ -438,6 +498,45 @@ export default function ProfilePage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Owned Leaderboards */}
+          <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
+            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
+              Owned Leaderboards
+            </label>
+            {ownedLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
+            ) : ownedLeaderboards.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No owned leaderboards.</p>
+            ) : (
+              <div className="space-y-3">
+                {ownedLeaderboards.map(board => (
+                  <div
+                    key={board.id}
+                    className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1f1f1f] px-3 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {board.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Code: {board.code} · {board.visibility}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteOwnedLeaderboard(board.id)}
+                        disabled={ownedDeletingId === board.id}
+                        className="px-3 py-1.5 rounded-full text-xs font-semibold bg-red-600 text-white disabled:opacity-60"
+                      >
+                        {ownedDeletingId === board.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>
