@@ -56,6 +56,8 @@ export default function ProfilePage() {
   const [ownedLeaderboards, setOwnedLeaderboards] = useState<OwnedLeaderboard[]>([]);
   const [ownedLoading, setOwnedLoading] = useState(false);
   const [ownedDeletingId, setOwnedDeletingId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [customizationOpen, setCustomizationOpen] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -327,177 +329,212 @@ export default function ProfilePage() {
         )}
 
         <div className="space-y-4">
-          {/* Email */}
+          {/* My details dropdown */}
           <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
-            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
-              Email Address
-            </label>
-            {!emailEditing ? (
-              <div className="flex items-center justify-between">
-                <p className="text-black dark:text-white">{email}</p>
-                <button
-                  onClick={() => {
-                    setEmailEditing(true);
-                    setNewEmail(email);
-                    setError(null);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors text-sm font-medium"
-                >
-                  Update Email
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
-                  placeholder="Enter new email"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleUpdateEmail}
-                    disabled={emailSaving || !newEmail.trim()}
-                    className="flex-1 px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {emailSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        Save
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEmailEditing(false);
-                      setNewEmail('');
-                      setError(null);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* First Name */}
-          <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
-            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
-              First Name
-            </label>
-            <p className="text-black dark:text-white">{profile?.first_name || 'Not set'}</p>
-          </div>
-
-          {/* Last Name */}
-          <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
-            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
-              Last Name
-            </label>
-            <p className="text-black dark:text-white">{profile?.last_name || 'Not set'}</p>
-          </div>
-
-          {/* Display Name */}
-          <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
-            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
-              Display Name
-            </label>
-            {!displayNameEditing ? (
-              <div className="flex items-center justify-between">
-                <p className="text-black dark:text-white">{displayName}</p>
-                <button
-                  onClick={() => {
-                    setDisplayNameEditing(true);
-                    setError(null);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors text-sm font-medium"
-                >
-                  Edit
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
-                  placeholder="Enter display name"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSaveDisplayName}
-                    disabled={displayNameSaving}
-                    className="flex-1 px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {displayNameSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        Save
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setDisplayNameEditing(false);
-                      // Reset to current value
-                      const defaultDisplayName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
-                      setDisplayName(profile?.display_name || defaultDisplayName);
-                      setError(null);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Profile Color */}
-          <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
-            <label className="block text-sm font-medium mb-3 text-gray-600 dark:text-gray-400">
-              Profile Color
-            </label>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              Choose a color for your card in the leaderboard
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {PROFILE_COLORS.map((color) => (
-                <button
-                  key={color.name}
-                  onClick={() => handleColorChange(color.name)}
-                  disabled={colorSaving}
-                  className={`relative p-2 rounded-xl border-2 transition-all ${
-                    profileColor === color.name
-                      ? 'border-black dark:border-white ring-2 ring-offset-1 ring-black dark:ring-white'
-                      : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <div className={`w-full h-10 rounded-lg ${color.bg} dark:${color.darkBg}`} />
-                  <p className="mt-1.5 text-[10px] font-medium text-black dark:text-white text-center">
-                    {color.label}
-                  </p>
-                  {profileColor === color.name && (
-                    <div className="absolute top-2 right-2">
-                      <div className="w-4 h-4 rounded-full bg-black dark:bg-white" />
+            <button
+              onClick={() => setDetailsOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                My details
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {detailsOpen ? '−' : '+'}
+              </span>
+            </button>
+            {detailsOpen && (
+              <div className="mt-4 space-y-4">
+                {/* Email */}
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1f1f1f] p-4">
+                  <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
+                    Email Address
+                  </label>
+                  {!emailEditing ? (
+                    <div className="flex items-center justify-between">
+                      <p className="text-black dark:text-white">{email}</p>
+                      <button
+                        onClick={() => {
+                          setEmailEditing(true);
+                          setNewEmail(email);
+                          setError(null);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors text-sm font-medium"
+                      >
+                        Update Email
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
+                        placeholder="Enter new email"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleUpdateEmail}
+                          disabled={emailSaving || !newEmail.trim()}
+                          className="flex-1 px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {emailSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              Save
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEmailEditing(false);
+                            setNewEmail('');
+                            setError(null);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
-                </button>
-              ))}
-            </div>
+                </div>
+
+                {/* First Name */}
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1f1f1f] p-4">
+                  <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
+                    First Name
+                  </label>
+                  <p className="text-black dark:text-white">{profile?.first_name || 'Not set'}</p>
+                </div>
+
+                {/* Last Name */}
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1f1f1f] p-4">
+                  <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
+                    Last Name
+                  </label>
+                  <p className="text-black dark:text-white">{profile?.last_name || 'Not set'}</p>
+                </div>
+
+                {/* Display Name */}
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1f1f1f] p-4">
+                  <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">
+                    Display Name
+                  </label>
+                  {!displayNameEditing ? (
+                    <div className="flex items-center justify-between">
+                      <p className="text-black dark:text-white">{displayName}</p>
+                      <button
+                        onClick={() => {
+                          setDisplayNameEditing(true);
+                          setError(null);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
+                        placeholder="Enter display name"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleSaveDisplayName}
+                          disabled={displayNameSaving}
+                          className="flex-1 px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {displayNameSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              Save
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDisplayNameEditing(false);
+                            const defaultDisplayName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
+                            setDisplayName(profile?.display_name || defaultDisplayName);
+                            setError(null);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Customization dropdown */}
+          <div className="bg-gray-50 dark:bg-[#2a2a2a] rounded-2xl p-4">
+            <button
+              onClick={() => setCustomizationOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Customization
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {customizationOpen ? '−' : '+'}
+              </span>
+            </button>
+            {customizationOpen && (
+              <div className="mt-4">
+                {/* Profile Color */}
+                <div className="bg-white dark:bg-[#1f1f1f] rounded-2xl p-4 border border-gray-200 dark:border-gray-800">
+                  <label className="block text-sm font-medium mb-3 text-gray-600 dark:text-gray-400">
+                    Profile Color
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Choose a color for your card in the leaderboard
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {PROFILE_COLORS.map((color) => (
+                      <button
+                        key={color.name}
+                        onClick={() => handleColorChange(color.name)}
+                        disabled={colorSaving}
+                        className={`relative p-2 rounded-xl border-2 transition-all ${
+                          profileColor === color.name
+                            ? 'border-black dark:border-white ring-2 ring-offset-1 ring-black dark:ring-white'
+                            : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        <div className={`w-full h-10 rounded-lg ${color.bg} dark:${color.darkBg}`} />
+                        <p className="mt-1.5 text-[10px] font-medium text-black dark:text-white text-center">
+                          {color.label}
+                        </p>
+                        {profileColor === color.name && (
+                          <div className="absolute top-2 right-2">
+                            <div className="w-4 h-4 rounded-full bg-black dark:bg-white" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Owned Leaderboards */}

@@ -839,12 +839,9 @@ export default function LeaderboardPage() {
       <div className="max-w-2xl mx-auto">
         <div className="mb-8">
           <div className="text-left">
-            <h1 className="text-3xl font-semibold mb-2 text-black dark:text-white">
-              Leaderboard
+            <h1 className="text-3xl font-semibold text-black dark:text-white">
+              Leaderboards
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm">
-              {formatMonthYear()} Challenge
-            </p>
           </div>
         </div>
 

@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Plus, Minus, Check } from 'lucide-react';
-import { getCurrentDayRange, getCurrentMonthRange } from '@/lib/date-utils';
+import { getCurrentDayRange, getCurrentMonthRange, getDaysInCurrentMonth } from '@/lib/date-utils';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [count, setCount] = useState(20);
+  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
@@ -17,6 +17,8 @@ export default function DashboardPage() {
   const [dailyTotal, setDailyTotal] = useState(0);
   const [todayMaxSet, setTodayMaxSet] = useState(0);
   const [monthlyMaxSet, setMonthlyMaxSet] = useState(0);
+  const [monthlyHeatmap, setMonthlyHeatmap] = useState<{ day: number; count: number }[]>([]);
+  const [monthlyMaxDaily, setMonthlyMaxDaily] = useState(0);
   const [limitError, setLimitError] = useState<string | null>(null);
   const [profileColor, setProfileColor] = useState<string>('green');
   const [profileColorLoaded, setProfileColorLoaded] = useState<boolean>(false);
@@ -33,6 +35,7 @@ export default function DashboardPage() {
       fetchProfileColor();
       fetchDailyTotal();
       fetchMaxSets();
+      fetchMonthlyHeatmap();
     }
   }, [user]);
 
@@ -250,6 +253,47 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchMonthlyHeatmap = async () => {
+    if (!user) return;
+
+    try {
+      const { monthStart, monthEnd } = getCurrentMonthRange();
+      const { data: monthLogs, error: monthError } = await supabase
+        .from('pushup_logs')
+        .select('count, created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', monthStart.toISOString())
+        .lte('created_at', monthEnd.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (monthError) throw monthError;
+
+      const dailyMap = new Map<number, number>();
+      monthLogs?.forEach((log) => {
+        const logDate = new Date(log.created_at);
+        const ukDate = new Date(logDate.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+        const day = ukDate.getDate();
+        const count = log.count || 0;
+        dailyMap.set(day, (dailyMap.get(day) || 0) + count);
+      });
+
+      const daysInMonth = getDaysInCurrentMonth();
+      const chartData: { day: number; count: number }[] = [];
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        chartData.push({
+          day,
+          count: dailyMap.get(day) || 0
+        });
+      }
+
+      const maxDaily = Math.max(...chartData.map(d => d.count), 0);
+      setMonthlyHeatmap(chartData);
+      setMonthlyMaxDaily(maxDaily);
+    } catch (error) {
+      console.error('Error fetching monthly heatmap:', error);
+    }
+  };
+
   const adjustCount = (delta: number) => {
     setCount((prev) => {
       const newCount = Math.max(0, prev + delta);
@@ -298,6 +342,7 @@ export default function DashboardPage() {
       // Refresh daily total and max sets
       await fetchDailyTotal();
       await fetchMaxSets();
+      await fetchMonthlyHeatmap();
       
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -354,6 +399,46 @@ export default function DashboardPage() {
   };
 
   const buttonColors = getButtonColorClasses(profileColor);
+
+  const getHeatmapColorClasses = (countValue: number, maxDailyInMonth: number) => {
+    if (maxDailyInMonth === 0 || countValue === 0) {
+      return 'bg-gray-200 dark:bg-gray-700';
+    }
+
+    const percentage = (countValue / maxDailyInMonth) * 100;
+    let opacityClass: string;
+    if (percentage <= 20) opacityClass = 'opacity-20';
+    else if (percentage <= 40) opacityClass = 'opacity-40';
+    else if (percentage <= 60) opacityClass = 'opacity-60';
+    else if (percentage <= 80) opacityClass = 'opacity-80';
+    else opacityClass = 'opacity-100';
+
+    const baseColorMap: Record<string, string> = {
+      red: 'bg-red-600',
+      orange: 'bg-orange-600',
+      amber: 'bg-amber-600',
+      yellow: 'bg-yellow-600',
+      lime: 'bg-lime-600',
+      green: 'bg-green-600',
+      emerald: 'bg-emerald-600',
+      mint: 'bg-teal-400',
+      teal: 'bg-teal-600',
+      cyan: 'bg-cyan-600',
+      sky: 'bg-sky-600',
+      blue: 'bg-blue-600',
+      indigo: 'bg-indigo-600',
+      purple: 'bg-purple-600',
+      violet: 'bg-violet-600',
+      pink: 'bg-pink-600',
+      rose: 'bg-rose-600',
+      coral: 'bg-orange-400',
+      brown: 'bg-amber-800',
+      slate: 'bg-slate-600',
+    };
+
+    const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+    return `${baseColor} ${opacityClass}`;
+  };
 
   return (
     <div className="min-h-screen px-4 py-8 pb-24 bg-white dark:bg-[#1a1a1a]">
@@ -497,6 +582,23 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-black dark:text-white">
                   {monthlyMaxSet}
                 </p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+                This month
+              </p>
+              <div className="flex flex-wrap gap-[2px] justify-start">
+                {monthlyHeatmap.map((data) => {
+                  const colorClass = getHeatmapColorClasses(data.count, monthlyMaxDaily);
+                  return (
+                    <div
+                      key={data.day}
+                      className={`w-[16px] h-[16px] sm:w-[12px] sm:h-[12px] rounded-sm ${colorClass}`}
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>
