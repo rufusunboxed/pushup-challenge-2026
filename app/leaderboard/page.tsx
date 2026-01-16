@@ -211,14 +211,19 @@ export default function LeaderboardPage() {
 
       const publicResult = await publicRequest;
 
-      if (membershipsResult.error) throw membershipsResult.error;
       if (publicResult.error) throw publicResult.error;
 
       const memberships = (membershipsResult.data || [])
         .map((item: any) => item.leaderboards)
         .filter(Boolean) as LeaderboardMeta[];
 
-      setUserLeaderboards(memberships);
+      if (membershipsResult.error) {
+        console.error('Error fetching memberships:', membershipsResult.error);
+        setUserLeaderboards([]);
+        setActionError('Could not load your memberships. Please run the latest Supabase SQL updates.');
+      } else {
+        setUserLeaderboards(memberships);
+      }
       setPublicLeaderboards((publicResult.data || []) as LeaderboardMeta[]);
 
       if (memberships.length === 0) {
@@ -228,9 +233,10 @@ export default function LeaderboardPage() {
       } else if (!memberships.some(board => board.id === selectedLeaderboardId)) {
         setSelectedLeaderboardId(memberships[0].id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching leaderboards:', error);
-      setActionError('Could not load leaderboards. Please try again.');
+      const message = error?.message || 'Could not load leaderboards. Please try again.';
+      setActionError(message);
     } finally {
       setLeaderboardListLoading(false);
     }
