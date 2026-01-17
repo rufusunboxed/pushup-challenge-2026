@@ -1779,7 +1779,7 @@ export default function HistoryPage() {
                         const canvas = await html2canvas(recapCardRef.current, {
                           background: '#ffffff',
                           scale: 2,
-                        });
+                        } as any);
                         
                         canvas.toBlob(async (blob) => {
                           if (!blob) return;
