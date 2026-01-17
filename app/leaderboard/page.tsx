@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, MoreVertical, X } from 'lucide-react';
 import { getCurrentMonthRange, getDaysInCurrentMonth, formatMonthYear, getCurrentDayRange } from '@/lib/date-utils';
 
 interface LeaderboardEntry {
@@ -57,12 +57,23 @@ export default function LeaderboardPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragActive, setDragActive] = useState(false);
-  const longPressTimerRef = useRef<number | null>(null);
+  const [showReorderMenu, setShowReorderMenu] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const reorderMenuRef = useRef<HTMLDivElement>(null);
+  const reorderButtonRef = useRef<HTMLButtonElement>(null);
+  const [reorderMenuPosition, setReorderMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const [pendingReorder, setPendingReorder] = useState<LeaderboardMeta[] | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   useEffect(() => {
     checkUser();
+    // Try to restore last selected leaderboard from localStorage
+    if (typeof window !== 'undefined') {
+      const lastSelected = localStorage.getItem('lastSelectedLeaderboardId');
+      if (lastSelected) {
+        setSelectedLeaderboardId(lastSelected);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -87,6 +98,39 @@ export default function LeaderboardPage() {
       fetchAllUserProfileColors();
     }
   }, [leaderboard]);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const reorderMenu = reorderMenuRef.current;
+      const reorderButton = reorderButtonRef.current;
+      const sortDropdown = document.querySelector('[data-sort-dropdown]');
+      
+      if (showReorderMenu) {
+        const isClickInMenu = target.closest('[data-reorder-menu]');
+        const isClickOnButton = reorderButton && reorderButton.contains(target);
+        if (!isClickInMenu && !isClickOnButton) {
+          setShowReorderMenu(false);
+          setReorderMenuPosition(null);
+          setPendingReorder(null); // Reset pending changes when closing menu
+        }
+      }
+      if (showSortDropdown && sortDropdown && !sortDropdown.contains(target)) {
+        setShowSortDropdown(false);
+      }
+    };
+
+    if (showReorderMenu || showSortDropdown) {
+      // Use a small delay to avoid immediate closure
+      setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 0);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showReorderMenu, showSortDropdown]);
 
   const fetchUserProfileColor = async () => {
     if (!user) return;
@@ -184,57 +228,191 @@ export default function LeaderboardPage() {
           )
         `)
         .eq('user_id', user.id)
-        .order('position', { ascending: true })
-        .order('joined_at', { ascending: true });
+        .order('position', { ascending: true, nullsFirst: false });
 
+      const publicResult = await publicRequest;
+
+      if (publicResult.error) throw publicResult.error;
+
+      // Check if position column exists
       const missingColumn = membershipsResult.error && (
         membershipsResult.error.message?.includes('column') ||
         membershipsResult.error.message?.includes('does not exist') ||
         membershipsResult.error.code === '42703'
       );
 
-      const fallbackResult = missingColumn
-        ? await supabase
-            .from('leaderboard_members')
-            .select(`
-              leaderboard_id,
-              leaderboards (
-                id,
-                code,
-                name,
-                visibility,
-                created_by,
-                created_at
-              )
-            `)
-            .eq('user_id', user.id)
-        : null;
+      if (missingColumn) {
+        console.error('Position column does not exist in leaderboard_members table. Please run the migration SQL.');
+        setActionError('Database migration required. Please run the position column migration SQL in Supabase.');
+        setUserLeaderboards([]);
+        setLeaderboardListLoading(false);
+        return;
+      }
 
-      const publicResult = await publicRequest;
+      if (membershipsResult.error) {
+        throw membershipsResult.error;
+      }
 
-      if (publicResult.error) throw publicResult.error;
-
-      const resolvedMemberships = (fallbackResult || membershipsResult).data || [];
-      const memberships = (resolvedMemberships as any[])
+      const resolvedMemberships = membershipsResult.data || [];
+      console.log('[FETCH] Raw memberships from database (ordered by position):', resolvedMemberships.map((item: any) => ({
+        leaderboard: item.leaderboards?.name,
+        position: item.position,
+        joined_at: item.joined_at
+      })));
+      
+      // Check for NULL positions and backfill if needed
+      const hasNullPositions = resolvedMemberships.some((item: any) => item.position == null);
+      if (hasNullPositions) {
+        console.log('[FETCH] Found NULL positions, backfilling...');
+        await backfillLeaderboardPositions(resolvedMemberships);
+        // Refetch to get updated positions (with ordering)
+        const { data: refetchedData, error: refetchError } = await supabase
+          .from('leaderboard_members')
+          .select(`
+            leaderboard_id,
+            position,
+            joined_at,
+            leaderboards (
+              id,
+              code,
+              name,
+              visibility,
+              created_by,
+              created_at
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('position', { ascending: true, nullsFirst: false });
+        
+        if (refetchError) {
+          console.error('[FETCH] Error refetching after backfill:', refetchError);
+        } else {
+          console.log('[FETCH] Refetched after backfill:', refetchedData?.map((item: any) => ({
+            leaderboard: item.leaderboards?.name,
+            position: item.position
+          })));
+          resolvedMemberships.splice(0, resolvedMemberships.length, ...(refetchedData || []));
+        }
+      }
+      
+      // Get all leaderboards first
+      const allLeaderboards = (resolvedMemberships as any[])
         .map((item: any) => item.leaderboards)
-        .filter(Boolean) as LeaderboardMeta[];
+        .filter((lb: any) => lb != null) as LeaderboardMeta[];
+      
+      // Try to load order from localStorage first (most reliable)
+      const localStorageOrder = loadOrderFromLocalStorage();
+      let finalOrder: LeaderboardMeta[] = [];
+      
+      if (localStorageOrder && localStorageOrder.length > 0) {
+        // Use localStorage order if available
+        console.log('[FETCH] Using localStorage order');
+        const orderMap = new Map(allLeaderboards.map(lb => [lb.id, lb]));
+        finalOrder = localStorageOrder
+          .map(id => orderMap.get(id))
+          .filter((lb): lb is LeaderboardMeta => lb != null);
+        
+        // Add any new leaderboards that aren't in localStorage order (newly joined)
+        const existingIds = new Set(finalOrder.map(lb => lb.id));
+        const newLeaderboards = allLeaderboards.filter(lb => !existingIds.has(lb.id));
+        finalOrder = [...finalOrder, ...newLeaderboards];
+        
+        // Update localStorage with complete order (including new ones)
+        saveOrderToLocalStorage(finalOrder);
+      } else {
+        // Fallback to database position order
+        console.log('[FETCH] Using database position order (no localStorage)');
+        const membershipsWithPosition = (resolvedMemberships as any[])
+          .map((item: any) => ({
+            leaderboard: item.leaderboards,
+            position: item.position != null ? Number(item.position) : 999999,
+            joined_at: item.joined_at,
+            leaderboard_id: item.leaderboard_id
+          }))
+          .filter((item: any) => item.leaderboard)
+          .sort((a: any, b: any) => {
+            const posA = a.position === 999999 ? null : a.position;
+            const posB = b.position === 999999 ? null : b.position;
+            
+            if (posA == null && posB == null) {
+              const dateA = a.joined_at ? new Date(a.joined_at).getTime() : 0;
+              const dateB = b.joined_at ? new Date(b.joined_at).getTime() : 0;
+              return dateA - dateB;
+            } else if (posA == null) {
+              return 1;
+            } else if (posB == null) {
+              return -1;
+            } else {
+              return posA - posB;
+            }
+          })
+          .map((item: any) => item.leaderboard) as LeaderboardMeta[];
+        
+        finalOrder = membershipsWithPosition;
+        // Save to localStorage for next time
+        saveOrderToLocalStorage(finalOrder);
+      }
+      
+      // Debug: Log the final order
+      if (finalOrder.length > 0) {
+        console.log('[FETCH] Final order:', finalOrder.map((b, idx) => `${idx}: ${b.name}`));
+      } else {
+        console.log('[FETCH] No leaderboards found');
+      }
 
-      const membershipError = fallbackResult?.error || membershipsResult.error;
+      const membershipError = membershipsResult.error;
       if (membershipError) {
         console.error('Error fetching memberships:', membershipError);
         setUserLeaderboards([]);
-        setActionError('Could not load your memberships. Please run the latest Supabase SQL updates.');
+        setActionError('Could not load your memberships. Please try again.');
       } else {
-        setUserLeaderboards(memberships);
+        setUserLeaderboards(finalOrder);
       }
       setPublicLeaderboards((publicResult.data || []) as LeaderboardMeta[]);
 
-      if (memberships.length === 0) {
+      // Handle selected leaderboard - preserve current selection if it still exists
+      // Priority: 1) Current selection (if exists), 2) localStorage, 3) First in list
+      if (finalOrder.length === 0) {
         setSelectedLeaderboardId(null);
-      } else if (!selectedLeaderboardId) {
-        setSelectedLeaderboardId(memberships[0].id);
-      } else if (!memberships.some(board => board.id === selectedLeaderboardId)) {
-        setSelectedLeaderboardId(memberships[0].id);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('lastSelectedLeaderboardId');
+        }
+      } else {
+        // Check if current selection still exists in the new ordered list
+        const currentSelectionExists = selectedLeaderboardId && 
+          finalOrder.some(board => board.id === selectedLeaderboardId);
+        
+        if (currentSelectionExists) {
+          // Current selection exists, keep it - don't update state unnecessarily
+          // Just update localStorage to ensure it's saved
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('lastSelectedLeaderboardId', selectedLeaderboardId);
+          }
+          console.log('Preserved current selection:', selectedLeaderboardId);
+        } else {
+          // Current selection doesn't exist, need to pick a new one
+          let leaderboardToSelect: string | null = null;
+          
+          // Try localStorage first
+          if (typeof window !== 'undefined') {
+            const lastSelected = localStorage.getItem('lastSelectedLeaderboardId');
+            if (lastSelected && finalOrder.some(board => board.id === lastSelected)) {
+              leaderboardToSelect = lastSelected;
+              console.log('Restored selection from localStorage:', lastSelected);
+            }
+          }
+          
+          // If no valid selection from localStorage, use first one
+          if (!leaderboardToSelect) {
+            leaderboardToSelect = finalOrder[0].id;
+            console.log('Selected first leaderboard:', leaderboardToSelect);
+          }
+          
+          setSelectedLeaderboardId(leaderboardToSelect);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('lastSelectedLeaderboardId', leaderboardToSelect);
+          }
+        }
       }
     } catch (error: any) {
       console.error('Error fetching leaderboards:', error);
@@ -296,6 +474,7 @@ export default function LeaderboardPage() {
       }
 
       await fetchLeaderboardLists();
+      // fetchLeaderboardLists will update localStorage automatically
       setSelectedLeaderboardId(leaderboardId);
       setShowJoinModal(false);
       setJoinCode('');
@@ -435,65 +614,236 @@ export default function LeaderboardPage() {
     }
   };
 
-  const moveLeaderboard = (fromId: string, toId: string) => {
-    if (fromId === toId) return;
-    setUserLeaderboards(prev => {
-      const fromIndex = prev.findIndex(board => board.id === fromId);
-      const toIndex = prev.findIndex(board => board.id === toId);
-      if (fromIndex === -1 || toIndex === -1) return prev;
-
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
+  const backfillLeaderboardPositions = async (memberships: any[]) => {
+    if (!user) return;
+    
+    // Find memberships with NULL positions
+    const nullPositionMemberships = memberships.filter((item: any) => item.position == null);
+    
+    if (nullPositionMemberships.length === 0) {
+      return; // No backfilling needed
+    }
+    
+    // Find the highest existing position
+    const existingPositions = memberships
+      .map((item: any) => item.position)
+      .filter((pos: any) => pos != null)
+      .map((pos: any) => Number(pos));
+    
+    const maxPosition = existingPositions.length > 0 ? Math.max(...existingPositions) : -1;
+    let nextPosition = maxPosition + 1;
+    
+    // Sort NULL position memberships by joined_at
+    const sortedNullPositions = [...nullPositionMemberships].sort((a: any, b: any) => {
+      const dateA = a.joined_at ? new Date(a.joined_at).getTime() : 0;
+      const dateB = b.joined_at ? new Date(b.joined_at).getTime() : 0;
+      return dateA - dateB;
     });
+    
+    // Backfill positions sequentially
+    const backfillPromises = sortedNullPositions.map((item: any) => {
+      const position = nextPosition++;
+      console.log(`Backfilling position for leaderboard ${item.leaderboards?.name || item.leaderboard_id} to ${position}`);
+      return supabase
+        .from('leaderboard_members')
+        .update({ position })
+        .eq('user_id', user.id)
+        .eq('leaderboard_id', item.leaderboard_id);
+    });
+    
+    const results = await Promise.all(backfillPromises);
+    const errors = results.filter(result => result.error);
+    
+    if (errors.length > 0) {
+      console.error('Error backfilling positions:', errors);
+    } else {
+      console.log(`Successfully backfilled ${sortedNullPositions.length} positions`);
+    }
   };
 
   const persistLeaderboardOrder = async (orderedBoards: LeaderboardMeta[]) => {
-    if (!user) return;
+    if (!user) {
+      console.error('persistLeaderboardOrder: No user found');
+      return false;
+    }
+    
+    console.log('[PERSIST] Starting to save leaderboard order:', orderedBoards.map((b, i) => `${b.name}:${i}`).join(', '));
+    
     try {
-      await Promise.all(
-        orderedBoards.map((board, index) =>
-          supabase
-            .from('leaderboard_members')
-            .update({ position: index })
-            .eq('user_id', user.id)
-            .eq('leaderboard_id', board.id)
-        )
+      // Ensure positions are sequential (0, 1, 2, 3...)
+      const updatePromises = orderedBoards.map((board, index) => {
+        console.log(`[PERSIST] Updating position for ${board.name} (${board.id}) to ${index}`);
+        return supabase
+          .from('leaderboard_members')
+          .update({ position: index })
+          .eq('user_id', user.id)
+          .eq('leaderboard_id', board.id);
+      });
+      
+      const results = await Promise.all(updatePromises);
+      
+      // Check for errors
+      const errors = results.filter(result => result.error);
+      if (errors.length > 0) {
+        console.error('[PERSIST] Error saving leaderboard order:', errors);
+        setActionError('Unable to save leaderboard order. Please try again.');
+        return false;
+      }
+      
+      console.log('[PERSIST] All updates completed, verifying positions...');
+      
+      // Verify positions were saved correctly by checking all positions
+      const verificationPromises = orderedBoards.map((board, expectedIndex) => 
+        supabase
+          .from('leaderboard_members')
+          .select('position')
+          .eq('user_id', user.id)
+          .eq('leaderboard_id', board.id)
+          .single()
       );
+      
+      const verificationResults = await Promise.all(verificationPromises);
+      const verificationErrors = verificationResults.filter(r => r.error);
+      const verifiedPositions = verificationResults
+        .filter(r => !r.error && r.data)
+        .map((r, idx) => ({ board: orderedBoards[idx].name, expected: idx, actual: r.data?.position }));
+      
+      if (verificationErrors.length > 0) {
+        console.warn('[PERSIST] Some positions could not be verified:', verificationErrors);
+      }
+      
+      const mismatches = verifiedPositions.filter(v => v.expected !== v.actual);
+      if (mismatches.length > 0) {
+        console.error('[PERSIST] Position verification failed:', mismatches);
+      } else {
+        console.log('[PERSIST] Position verification successful:', verifiedPositions);
+      }
+      
+      console.log('[PERSIST] Successfully saved leaderboard order');
+      return true;
     } catch (error) {
-      console.error('Error saving leaderboard order:', error);
+      console.error('[PERSIST] Exception saving leaderboard order:', error);
       setActionError('Unable to save leaderboard order. Please try again.');
+      return false;
     }
   };
 
-  const startLongPress = (boardId: string) => {
-    if (longPressTimerRef.current) {
-      window.clearTimeout(longPressTimerRef.current);
-    }
-    longPressTimerRef.current = window.setTimeout(() => {
-      setDraggingId(boardId);
-      setDragActive(true);
-    }, 250);
+  // Get the current order to work with (pendingReorder if exists, otherwise userLeaderboards)
+  const getCurrentReorderList = () => {
+    return pendingReorder || userLeaderboards;
   };
 
-  const clearLongPress = () => {
-    if (longPressTimerRef.current) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
+  // Save order to localStorage immediately
+  const saveOrderToLocalStorage = (order: LeaderboardMeta[]) => {
+    if (typeof window !== 'undefined' && user) {
+      const orderIds = order.map(b => b.id);
+      localStorage.setItem(`leaderboard_order_${user.id}`, JSON.stringify(orderIds));
+      console.log('[LOCALSTORAGE] Saved order:', orderIds);
     }
   };
 
-  const finishDrag = async () => {
-    clearLongPress();
-    if (!draggingId) {
-      setDragActive(false);
+  // Load order from localStorage
+  const loadOrderFromLocalStorage = (): string[] | null => {
+    if (typeof window !== 'undefined' && user) {
+      const stored = localStorage.getItem(`leaderboard_order_${user.id}`);
+      if (stored) {
+        try {
+          const orderIds = JSON.parse(stored);
+          console.log('[LOCALSTORAGE] Loaded order:', orderIds);
+          return orderIds;
+        } catch (e) {
+          console.error('[LOCALSTORAGE] Failed to parse stored order:', e);
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleMoveLeaderboardLeft = (boardId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentList = getCurrentReorderList();
+    const currentIndex = currentList.findIndex(board => board.id === boardId);
+    if (currentIndex <= 0) {
+      console.log('[REORDER] Cannot move left - already at start');
       return;
     }
-    const currentOrder = [...userLeaderboards];
-    await persistLeaderboardOrder(currentOrder);
-    setDraggingId(null);
-    setDragActive(false);
+
+    console.log('[REORDER] Moving left - current order:', currentList.map((b, i) => `${i}: ${b.name}`));
+    
+    const newOrder = [...currentList];
+    [newOrder[currentIndex - 1], newOrder[currentIndex]] = [newOrder[currentIndex], newOrder[currentIndex - 1]];
+    
+    console.log('[REORDER] New order after swap:', newOrder.map((b, i) => `${i}: ${b.name}`));
+    
+    // Update both pendingReorder AND userLeaderboards for immediate visual feedback
+    setPendingReorder(newOrder);
+    setUserLeaderboards(newOrder); // Update tabs at top immediately
+    // Save to localStorage immediately
+    saveOrderToLocalStorage(newOrder);
+  };
+
+  const handleMoveLeaderboardRight = (boardId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentList = getCurrentReorderList();
+    const currentIndex = currentList.findIndex(board => board.id === boardId);
+    if (currentIndex < 0 || currentIndex >= currentList.length - 1) {
+      console.log('[REORDER] Cannot move right - already at end');
+      return;
+    }
+
+    console.log('[REORDER] Moving right - current order:', currentList.map((b, i) => `${i}: ${b.name}`));
+    
+    const newOrder = [...currentList];
+    [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
+    
+    console.log('[REORDER] New order after swap:', newOrder.map((b, i) => `${i}: ${b.name}`));
+    
+    // Update both pendingReorder AND userLeaderboards for immediate visual feedback
+    setPendingReorder(newOrder);
+    setUserLeaderboards(newOrder); // Update tabs at top immediately
+    // Save to localStorage immediately
+    saveOrderToLocalStorage(newOrder);
+  };
+
+  const handleSaveReorder = async () => {
+    // Always use userLeaderboards since it's already updated in real-time when arrows are clicked
+    // This is the source of truth for what's displayed in the UI
+    const orderToSave = userLeaderboards;
+    
+    if (!orderToSave || orderToSave.length === 0) {
+      console.log('[REORDER] No order to save');
+      return;
+    }
+
+    setSavingOrder(true);
+    console.log('[REORDER] Saving current UI order to database and localStorage:', orderToSave.map((b, i) => `${i}: ${b.name} (${b.id})`).join(', '));
+    
+    // Save to localStorage first (immediate, always works)
+    saveOrderToLocalStorage(orderToSave);
+    
+    // Also save to database (for cross-device sync, but localStorage is primary)
+    const success = await persistLeaderboardOrder(orderToSave);
+    if (success) {
+      setPendingReorder(null);
+      setShowReorderMenu(false);
+      console.log('[REORDER] Order saved successfully to both localStorage and database.');
+    } else {
+      // Even if DB save fails, localStorage is saved, so order is preserved
+      console.warn('[REORDER] Database save failed, but localStorage is saved. Order will persist.');
+      setPendingReorder(null);
+      setShowReorderMenu(false);
+      setActionError('Order saved locally. Database sync may have failed.');
+    }
+    setSavingOrder(false);
+  };
+
+  const handleCancelReorder = async () => {
+    // Revert to original order from database
+    console.log('[REORDER] Cancelling reorder changes, reverting to saved order...');
+    setPendingReorder(null);
+    setShowReorderMenu(false);
+    // Refetch to get the correct order from database
+    await fetchLeaderboardLists();
   };
 
   const checkUser = async () => {
@@ -890,41 +1240,53 @@ export default function LeaderboardPage() {
               Loading leaderboards...
             </div>
           ) : userLeaderboards.length > 0 ? (
-            <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-2 -mx-4 px-4">
-              {userLeaderboards.map(board => (
-                <button
-                  key={board.id}
-                  onClick={() => {
-                    if (dragActive) return;
-                    setSelectedLeaderboardId(board.id);
-                  }}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    startLongPress(board.id);
-                  }}
-                  onPointerUp={finishDrag}
-                  onPointerCancel={finishDrag}
-                  onPointerLeave={() => {
-                    if (!draggingId) {
-                      clearLongPress();
-                    }
-                  }}
-                  onPointerEnter={() => {
-                    if (draggingId) {
-                      moveLeaderboard(draggingId, board.id);
-                    }
-                  }}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all shrink-0 select-none ${
-                    selectedLeaderboardId === board.id
-                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                      : 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                  } ${draggingId === board.id ? 'scale-105 shadow-md' : ''}`}
-                  style={{ touchAction: 'manipulation', WebkitUserSelect: 'none' }}
-                >
-                  {board.name}
-                </button>
-              ))}
+            <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-2 -mx-4 px-4 items-center">
+                {userLeaderboards.map(board => (
+                  <button
+                    key={board.id}
+                    onClick={() => {
+                      setSelectedLeaderboardId(board.id);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('lastSelectedLeaderboardId', board.id);
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all shrink-0 ${
+                      selectedLeaderboardId === board.id
+                        ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                        : 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
+                    }`}
+                  >
+                    {board.name}
+                  </button>
+                ))}
+              {userLeaderboards.length >= 2 && (
+                <div className="relative shrink-0" data-dropdown ref={reorderMenuRef}>
+                  <button
+                    ref={reorderButtonRef}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const willShow = !showReorderMenu;
+                      setShowReorderMenu(willShow);
+                      if (willShow && reorderButtonRef.current) {
+                        // Initialize pendingReorder with current order when opening menu
+                        setPendingReorder(null);
+                        const rect = reorderButtonRef.current.getBoundingClientRect();
+                        setReorderMenuPosition({
+                          top: rect.bottom + 4,
+                          right: window.innerWidth - rect.right
+                        });
+                      } else {
+                        // Reset pending changes when closing menu
+                        setPendingReorder(null);
+                        setReorderMenuPosition(null);
+                      }
+                    }}
+                    className="p-2 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333] transition-colors"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -985,6 +1347,62 @@ export default function LeaderboardPage() {
           )}
         </div>
 
+        {/* Reorder menu portal - rendered outside scrollable container */}
+        {showReorderMenu && userLeaderboards.length >= 2 && reorderMenuPosition && (
+          <div 
+            data-reorder-menu
+            className="fixed bg-white dark:bg-[#1a1a1a] rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 py-1.5 min-w-[220px] z-[9999]"
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              top: `${reorderMenuPosition.top}px`,
+              right: `${reorderMenuPosition.right}px`
+            }}
+          >
+            {userLeaderboards.map((board, index) => {
+              return (
+                <div key={board.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-[#2a2a2a]">
+                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 mr-2">{board.name}</span>
+                  <div className="flex gap-0.5 shrink-0">
+                    <button
+                      onClick={(e) => handleMoveLeaderboardLeft(board.id, e)}
+                      disabled={index === 0}
+                      className="px-2 py-1 rounded text-xs font-medium disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#333] transition-colors"
+                    >
+                      ←
+                    </button>
+                    <button
+                      onClick={(e) => handleMoveLeaderboardRight(board.id, e)}
+                      disabled={index === userLeaderboards.length - 1}
+                      className="px-2 py-1 rounded text-xs font-medium disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#333] transition-colors"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {/* Save and Cancel buttons */}
+            <div className="border-t border-gray-200 dark:border-gray-800 mt-1.5 pt-1.5 px-3 space-y-1.5">
+              <button
+                onClick={handleSaveReorder}
+                disabled={!pendingReorder || savingOrder}
+                className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {savingOrder ? 'Saving...' : 'Save Order'}
+              </button>
+              {pendingReorder && (
+                <button
+                  onClick={handleCancelReorder}
+                  disabled={savingOrder}
+                  className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {selectedLeaderboardId ? (
           loading ? (
             <div className="text-center py-12 text-gray-600 dark:text-gray-400">
@@ -996,38 +1414,60 @@ export default function LeaderboardPage() {
             </div>
           ) : (
             <>
-              {/* Tab Filter UI */}
-              <div className="mb-6 bg-gray-100 dark:bg-[#2a2a2a] rounded-2xl p-1.5 flex gap-1.5">
-                <button
-                  onClick={() => handleSortChange('monthly')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
-                    sortBy === 'monthly'
-                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                  }`}
-                >
-                  Monthly Total
-                </button>
-                <button
-                  onClick={() => handleSortChange('daily')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
-                    sortBy === 'daily'
-                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                  }`}
-                >
-                  Daily Total
-                </button>
-                <button
-                  onClick={() => handleSortChange('maxSet')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${
-                    sortBy === 'maxSet'
-                      ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333]'
-                  }`}
-                >
-                  Max Set
-                </button>
+              {/* Sort Dropdown */}
+              <div className="mb-6 flex justify-end">
+                <div className="relative" data-sort-dropdown>
+                  <button
+                    onClick={() => setShowSortDropdown(!showSortDropdown)}
+                    className="px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-[#2a2a2a] hover:bg-gray-200 dark:hover:bg-[#333] flex items-center gap-2 transition-colors"
+                  >
+                    {sortBy === 'monthly' ? 'Monthly Total' : sortBy === 'daily' ? 'Daily Total' : 'Max Set'}
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSortDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showSortDropdown && (
+                    <div className="absolute right-0 top-full mt-2 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 min-w-[150px] z-50">
+                      <button
+                        onClick={() => {
+                          handleSortChange('monthly');
+                          setShowSortDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                          sortBy === 'monthly'
+                            ? 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-900 dark:text-white font-medium'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2a2a]'
+                        }`}
+                      >
+                        Monthly Total
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleSortChange('daily');
+                          setShowSortDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                          sortBy === 'daily'
+                            ? 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-900 dark:text-white font-medium'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2a2a]'
+                        }`}
+                      >
+                        Daily Total
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleSortChange('maxSet');
+                          setShowSortDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                          sortBy === 'maxSet'
+                            ? 'bg-gray-100 dark:bg-[#2a2a2a] text-gray-900 dark:text-white font-medium'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2a2a]'
+                        }`}
+                      >
+                        Max Set
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -1293,7 +1733,22 @@ export default function LeaderboardPage() {
                 })()}
               </div>
 
-              {selectedLeaderboardMeta && (
+              {/* All Users leave button - only show for All Users leaderboard */}
+              {selectedLeaderboardMeta?.code === 'ALLUSERS' && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={handleLeaveLeaderboard}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-lg text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Leave
+                  </button>
+                </div>
+              )}
+
+              {/* Share code card - hide for All Users leaderboard */}
+              {selectedLeaderboardMeta && selectedLeaderboardMeta.code !== 'ALLUSERS' && (
                 <div className="mt-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#2a2a2a] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -1313,9 +1768,10 @@ export default function LeaderboardPage() {
                     <button
                       onClick={handleLeaveLeaderboard}
                       disabled={actionLoading}
-                      className="px-3 py-2 rounded-xl text-xs font-semibold bg-red-600 text-white"
+                      className="px-3 py-1.5 rounded-lg text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-1.5 transition-colors disabled:opacity-50"
                     >
-                      Leave leaderboard
+                      <X className="w-3.5 h-3.5" />
+                      Leave
                     </button>
                   </div>
                 </div>
@@ -1345,7 +1801,7 @@ export default function LeaderboardPage() {
                 setShowJoinModal(true);
                 setActionError(null);
               }}
-              className="flex-1 px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2a2a]"
+              className="flex-1 px-4 py-3 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] text-sm font-semibold transition-colors"
             >
               Join a leaderboard
             </button>
@@ -1355,7 +1811,7 @@ export default function LeaderboardPage() {
                 setGeneratedCode(null);
                 setActionError(null);
               }}
-              className="flex-1 px-4 py-3 rounded-2xl bg-black dark:bg-white text-white dark:text-black text-sm font-semibold"
+              className="flex-1 px-4 py-3 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] text-sm font-semibold transition-colors"
             >
               Create a leaderboard
             </button>
