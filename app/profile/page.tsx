@@ -350,15 +350,15 @@ export default function ProfilePage() {
                     Email Address
                   </label>
                   {!emailEditing ? (
-                    <div className="flex items-center justify-between">
-                      <p className="text-black dark:text-white">{email}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-black dark:text-white flex-1 break-words">{email}</p>
                       <button
                         onClick={() => {
                           setEmailEditing(true);
                           setNewEmail(email);
                           setError(null);
                         }}
-                        className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors text-sm font-medium"
+                        className="px-4 py-2 rounded-xl bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] transition-colors text-sm font-medium flex-shrink-0"
                       >
                         Update Email
                       </button>

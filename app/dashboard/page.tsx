@@ -22,6 +22,8 @@ export default function DashboardPage() {
   const [limitError, setLimitError] = useState<string | null>(null);
   const [profileColor, setProfileColor] = useState<string>('green');
   const [profileColorLoaded, setProfileColorLoaded] = useState<boolean>(false);
+  const [animationType, setAnimationType] = useState<'none' | 'plus1' | 'plus5' | 'submit'>('none');
+  const [numberAnimating, setNumberAnimating] = useState<boolean>(false);
 
   useEffect(() => {
     checkUser();
@@ -294,7 +296,41 @@ export default function DashboardPage() {
     }
   };
 
+  const triggerVibration = (type: 'plus1' | 'plus5' | 'submit') => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      switch (type) {
+        case 'plus1':
+          navigator.vibrate(10); // Light tap
+          break;
+        case 'plus5':
+          navigator.vibrate([20, 10, 20]); // Double tap feel
+          break;
+        case 'submit':
+          navigator.vibrate([30, 20, 30, 20, 30]); // Celebration pattern
+          break;
+      }
+    }
+  };
+
   const adjustCount = (delta: number) => {
+    // Detect animation type based on delta
+    if (delta === 1) {
+      setAnimationType('plus1');
+      triggerVibration('plus1');
+      setTimeout(() => setAnimationType('none'), 150);
+    } else if (delta === 5) {
+      setAnimationType('plus5');
+      triggerVibration('plus5');
+      setTimeout(() => setAnimationType('none'), 200);
+    } else if (delta === -1 || delta === -5) {
+      // No animation for negative deltas, just haptic feedback
+      triggerVibration('plus1');
+    }
+    
+    // Trigger number bounce animation
+    setNumberAnimating(true);
+    setTimeout(() => setNumberAnimating(false), 300);
+    
     setCount((prev) => {
       const newCount = Math.max(0, prev + delta);
       checkLimit(newCount);
@@ -335,9 +371,18 @@ export default function DashboardPage() {
 
       if (error) throw error;
 
+      // Trigger submit animation and haptic feedback
+      setAnimationType('submit');
+      triggerVibration('submit');
+      setTimeout(() => setAnimationType('none'), 600);
+      
+      // Trigger number bounce animation
+      setNumberAnimating(true);
+      setTimeout(() => setNumberAnimating(false), 300);
+
       setSubmitted(true);
       setSubmittedCount(count);
-      setCount(20); // Reset to default after successful submission
+      setCount(0); // Reset to 0 after successful submission
       
       // Refresh daily total and max sets
       await fetchDailyTotal();
@@ -399,6 +444,33 @@ export default function DashboardPage() {
   };
 
   const buttonColors = getButtonColorClasses(profileColor);
+
+  // Get RGB color for glow effect based on profile color
+  const getGlowColor = (color: string): string => {
+    const colorMap: Record<string, string> = {
+      red: '239, 68, 68', // red-500
+      orange: '249, 115, 22', // orange-500
+      amber: '245, 158, 11', // amber-500
+      yellow: '234, 179, 8', // yellow-500
+      lime: '132, 204, 22', // lime-500
+      green: '34, 197, 94', // green-500
+      emerald: '16, 185, 129', // emerald-500
+      mint: '94, 234, 212', // teal-300
+      teal: '20, 184, 166', // teal-500
+      cyan: '6, 182, 212', // cyan-500
+      sky: '14, 165, 233', // sky-500
+      blue: '37, 99, 235', // blue-500
+      indigo: '99, 102, 241', // indigo-500
+      purple: '168, 85, 247', // purple-500
+      violet: '139, 92, 246', // violet-500
+      pink: '236, 72, 153', // pink-500
+      rose: '244, 63, 94', // rose-500
+      coral: '251, 146, 60', // orange-300
+      brown: '180, 83, 9', // amber-700
+      slate: '100, 116, 139', // slate-500
+    };
+    return colorMap[color] || colorMap.green;
+  };
 
   const getHeatmapColorClasses = (countValue: number, maxDailyInMonth: number) => {
     if (maxDailyInMonth === 0 || countValue === 0) {
@@ -487,17 +559,20 @@ export default function DashboardPage() {
                 setCount(newValue);
                 checkLimit(newValue);
                 setSubmitted(false);
+                // Trigger number bounce animation
+                setNumberAnimating(true);
+                setTimeout(() => setNumberAnimating(false), 300);
               }}
               onClick={(e) => e.currentTarget.select()}
               inputMode="numeric"
-              className="text-6xl font-bold text-center bg-transparent border-none outline-none text-black dark:text-white w-28 focus:ring-0 cursor-pointer mx-auto"
+              className={`text-6xl font-bold text-center bg-transparent border-none outline-none text-black dark:text-white w-28 focus:ring-0 cursor-pointer mx-auto ${numberAnimating ? 'animate-number-bounce' : ''}`}
               style={{ WebkitAppearance: 'none', MozAppearance: 'textfield' }}
             />
 
             {/* +1 button */}
             <button
               onClick={() => adjustCount(1)}
-              className="w-12 h-12 rounded-xl bg-white dark:bg-[#1a1a1a] border-2 border-gray-300 dark:border-gray-700 text-black dark:text-white font-medium hover:opacity-80 active:opacity-60 transition-opacity flex items-center justify-center flex-shrink-0"
+              className={`w-12 h-12 rounded-xl bg-white dark:bg-[#1a1a1a] border-2 border-gray-300 dark:border-gray-700 text-black dark:text-white font-medium hover:opacity-80 active:opacity-60 transition-opacity flex items-center justify-center flex-shrink-0 ${animationType === 'plus1' ? 'animate-pulse-small' : ''}`}
             >
               <Plus className="w-4 h-4" />
               <span className="text-xs ml-0.5">1</span>
@@ -506,7 +581,7 @@ export default function DashboardPage() {
             {/* +5 button */}
             <button
               onClick={() => adjustCount(5)}
-              className="w-12 h-12 rounded-xl bg-white dark:bg-[#1a1a1a] border-2 border-gray-300 dark:border-gray-700 text-black dark:text-white font-medium hover:opacity-80 active:opacity-60 transition-opacity flex items-center justify-center flex-shrink-0"
+              className={`w-12 h-12 rounded-xl bg-white dark:bg-[#1a1a1a] border-2 border-gray-300 dark:border-gray-700 text-black dark:text-white font-medium hover:opacity-80 active:opacity-60 transition-opacity flex items-center justify-center flex-shrink-0 ${animationType === 'plus5' ? 'animate-pulse-medium' : ''}`}
             >
               <Plus className="w-4 h-4" />
               <span className="text-xs ml-0.5">5</span>
@@ -525,7 +600,8 @@ export default function DashboardPage() {
             <button
               onClick={handleSubmit}
               disabled={loading || count <= 0 || (dailyTotal + count > 300)}
-              className={`w-full py-4 rounded-2xl ${buttonColors.bg} ${buttonColors.hover} text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg ${buttonColors.shadow}`}
+              className={`w-full py-4 rounded-2xl ${buttonColors.bg} ${buttonColors.hover} text-white font-medium text-lg active:scale-95 transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center min-h-[60px] shadow-lg ${buttonColors.shadow} ${animationType === 'submit' ? 'animate-glow-submit' : ''}`}
+              style={{ '--glow-color': getGlowColor(profileColor) } as React.CSSProperties}
             >
               {submitted ? (
                 <span className="flex items-center animate-pulse">
