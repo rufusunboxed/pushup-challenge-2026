@@ -1777,7 +1777,7 @@ export default function HistoryPage() {
                       
                       try {
                         const canvas = await html2canvas(recapCardRef.current, {
-                          backgroundColor: '#ffffff',
+                          background: '#ffffff',
                           scale: 2,
                         });
                         
