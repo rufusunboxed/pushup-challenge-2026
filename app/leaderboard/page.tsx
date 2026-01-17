@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ChevronDown, MoreVertical, X } from 'lucide-react';
+import { ChevronDown, MoreVertical, X, Share2 } from 'lucide-react';
 import { getCurrentMonthRange, getDaysInCurrentMonth, formatMonthYear, getCurrentDayRange } from '@/lib/date-utils';
 
 interface LeaderboardEntry {
@@ -589,6 +589,29 @@ export default function LeaderboardPage() {
       setTimeout(() => setCopiedCode(false), 1500);
     } catch (error) {
       console.error('Error copying code:', error);
+    }
+  };
+
+  const handleShareLeaderboard = async (code: string) => {
+    const message = `Join my leaderboard on Pushup Challenge! Use the code ${code} to join my leaderboard.`;
+    const url = typeof window !== 'undefined' ? window.location.origin : '';
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join my leaderboard',
+          text: message,
+          url: url,
+        });
+      } catch (error) {
+        // User cancelled or error occurred
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+        }
+      }
+    } else {
+      // Fallback to copy
+      handleCopyCode(code);
     }
   };
 
@@ -1759,6 +1782,13 @@ export default function LeaderboardPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleShareLeaderboard(selectedLeaderboardMeta.code)}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-[#404040] flex items-center gap-1.5"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      Share
+                    </button>
                     <button
                       onClick={() => handleCopyCode(selectedLeaderboardMeta.code)}
                       className="px-3 py-2 rounded-xl text-xs font-semibold bg-black dark:bg-white text-white dark:text-black"

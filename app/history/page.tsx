@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ChevronDown, ChevronUp, Plus, Minus, Trash2, Check, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Minus, Trash2, Check, Loader2, Share2, Download, X } from 'lucide-react';
 import { formatDateLabel } from '@/lib/date-utils';
+import html2canvas from 'html2canvas';
 
 interface Submission {
   id: string;
@@ -59,6 +60,11 @@ export default function HistoryPage() {
   const [selectedDay, setSelectedDay] = useState<HeatmapDay | null>(null);
   const heatmapContainerRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
+  
+  // Recap state
+  const [selectedRecapMonth, setSelectedRecapMonth] = useState<string | null>(null);
+  const [userDisplayName, setUserDisplayName] = useState<string>('');
+  const recapCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     checkUser();
@@ -68,6 +74,7 @@ export default function HistoryPage() {
     if (user) {
       fetchUserHistory();
       fetchUserProfileColor();
+      fetchUserDisplayName();
     }
   }, [user]);
 
@@ -350,6 +357,29 @@ export default function HistoryPage() {
     }
   };
 
+  const fetchUserDisplayName = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('display_name, first_name')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user display name:', error);
+        setUserDisplayName('User');
+        return;
+      }
+      
+      setUserDisplayName(data?.display_name || data?.first_name || 'User');
+    } catch (error) {
+      console.error('Error fetching user display name:', error);
+      setUserDisplayName('User');
+    }
+  };
+
 
   // Get heatmap color classes based on profile color and intensity (opacity-based)
   const getHeatmapColorClasses = (count: number, isFuture: boolean, isPastEmpty: boolean): string => {
@@ -560,6 +590,134 @@ export default function HistoryPage() {
     const date = new Date(year, month, 1);
     return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   };
+
+  // Get months with data (sorted newest first)
+  // Only show months that actually have data (total > 0)
+  const monthsWithData = useMemo(() => {
+    return Array.from(monthlyStats.entries())
+      .filter(([_, stats]) => stats.total > 0)
+      .sort(([a], [b]) => {
+        const [yearA, monthA] = a.split('-').map(Number);
+        const [yearB, monthB] = b.split('-').map(Number);
+        return yearB * 12 + monthB - (yearA * 12 + monthA);
+      });
+  }, [monthlyStats]);
+
+  // Generate month-specific heatmap grid (7 columns, variable rows)
+  // Day 1 is always in the top-left corner, then fills left-to-right, top-to-bottom
+  // Returns grid and total days count
+  const getMonthHeatmap = useCallback((monthKey: string): { grid: (HeatmapDay | null)[][], totalDays: number } => {
+    const [year, month] = monthKey.split('-').map(Number);
+    
+    // Create a map of date strings to heatmap days for quick lookup
+    const dayMap = new Map<string, HeatmapDay>();
+    heatmapDays.forEach(day => {
+      const dayYear = day.date.getFullYear();
+      const dayMonth = day.date.getMonth();
+      if (dayYear === year && dayMonth === month) {
+        // Use the actual date from the day object, converted to UK timezone
+        const ukDate = new Date(day.date.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+        ukDate.setHours(0, 0, 0, 0);
+        const dateKey = `${ukDate.getFullYear()}-${String(ukDate.getMonth() + 1).padStart(2, '0')}-${String(ukDate.getDate()).padStart(2, '0')}`;
+        dayMap.set(dateKey, day);
+      }
+    });
+    
+    // Get total days in month
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    // Calculate number of rows needed (7 columns, always start day 1 at top-left)
+    const rows = Math.ceil(totalDays / 7);
+    
+    // Create grid: 7 columns, variable rows
+    // Day 1 goes at (0, 0), Day 2 at (0, 1), etc.
+    const grid: (HeatmapDay | null)[][] = [];
+    
+    // Initialize grid with nulls
+    for (let row = 0; row < rows; row++) {
+      grid[row] = [];
+      for (let col = 0; col < 7; col++) {
+        grid[row][col] = null;
+      }
+    }
+    
+    // Fill grid with ALL days of the month (not just days with data)
+    // Day 1 is at (0, 0), Day 2 at (0, 1), ..., Day 8 at (1, 0), etc.
+    const now = new Date();
+    const ukToday = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+    ukToday.setHours(0, 0, 0, 0);
+    
+    for (let dayOfMonth = 1; dayOfMonth <= totalDays; dayOfMonth++) {
+      // Create date for this day
+      const currentDate = new Date(year, month, dayOfMonth);
+      const ukDate = new Date(currentDate.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+      ukDate.setHours(0, 0, 0, 0);
+      
+      // Calculate position in grid: simple sequential placement
+      // Day 1 (index 0) -> row 0, col 0
+      // Day 2 (index 1) -> row 0, col 1
+      // Day 8 (index 7) -> row 1, col 0
+      const dayIndex = dayOfMonth - 1; // 0-based index (0 for day 1, 1 for day 2, etc.)
+      const row = Math.floor(dayIndex / 7);
+      const col = dayIndex % 7;
+      
+      // Ensure we're within bounds
+      if (row >= rows || col >= 7) {
+        console.warn(`[RECAP] Day ${dayOfMonth} out of bounds: row=${row}, col=${col}, rows=${rows}`);
+        continue;
+      }
+      
+      // Create date key for lookup (using UK timezone)
+      const dateKey = `${ukDate.getFullYear()}-${String(ukDate.getMonth() + 1).padStart(2, '0')}-${String(ukDate.getDate()).padStart(2, '0')}`;
+      
+      // Check if we have data for this day, otherwise create a placeholder
+      const existingDay = dayMap.get(dateKey);
+      
+      if (existingDay) {
+        // Use existing day data
+        grid[row][col] = existingDay;
+      } else {
+        // Create a placeholder day for days without data
+        const isFuture = ukDate > ukToday;
+        const isToday = ukDate.getTime() === ukToday.getTime();
+        grid[row][col] = {
+          date: ukDate,
+          count: 0,
+          isFuture,
+          isToday,
+        };
+      }
+    }
+    
+    // Verify grid has all days
+    let nonNullCount = 0;
+    grid.forEach((row, rowIdx) => {
+      const rowDays = row.filter(cell => cell !== null).length;
+      nonNullCount += rowDays;
+      console.log(`[RECAP] Row ${rowIdx}: ${rowDays} days, ${row.length} total cells`);
+    });
+    
+    console.log(`[RECAP] Grid summary: ${rows} rows, ${nonNullCount} days placed, expected ${totalDays} days`);
+    
+    if (nonNullCount !== totalDays) {
+      console.warn(`[RECAP] Grid mismatch: expected ${totalDays} days, found ${nonNullCount} cells`);
+    }
+    
+    return { grid, totalDays };
+  }, [heatmapDays]);
+
+  // Get max daily count for a specific month (for heatmap intensity)
+  const getMonthMaxDaily = useCallback((monthKey: string): number => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthDays = heatmapDays.filter(day => {
+      const dayYear = day.date.getFullYear();
+      const dayMonth = day.date.getMonth();
+      return dayYear === year && dayMonth === month;
+    });
+    
+    if (monthDays.length === 0) return 0;
+    return Math.max(...monthDays.map(day => day.count));
+  }, [heatmapDays]);
 
   // Format date for tooltip (e.g., "20th Jan 2026")
   const formatDateForTooltip = (date: Date): string => {
@@ -1257,7 +1415,7 @@ export default function HistoryPage() {
                 </div>
 
                 {/* Divider */}
-                <div className="py-4">
+                <div className="pt-4 pb-0">
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
@@ -1265,6 +1423,31 @@ export default function HistoryPage() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Monthly Recap Buttons */}
+            {monthsWithData.length > 0 && (
+              <>
+                <div className="-mt-2 mb-0">
+                  <h2 className="text-lg font-semibold text-black dark:text-white m-0">
+                    Your Recaps
+                  </h2>
+                </div>
+                <div className="mb-3 overflow-x-auto -mx-4 px-4">
+                  <div className="flex gap-2 pb-2">
+                    {monthsWithData.map(([monthKey, stats]) => (
+                      <button
+                        key={monthKey}
+                        onClick={() => setSelectedRecapMonth(monthKey)}
+                        className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#333] text-sm font-medium whitespace-nowrap shrink-0 transition-colors"
+                      >
+                        {formatMonthName(monthKey)} Recap
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mb-3 border-t border-gray-200 dark:border-gray-800"></div>
+              </>
             )}
 
             {/* Existing History List */}
@@ -1464,6 +1647,181 @@ export default function HistoryPage() {
             )}
           </>
         )}
+
+        {/* Recap Modal */}
+        {selectedRecapMonth && (() => {
+          const monthStats = monthlyStats.get(selectedRecapMonth) || { total: 0, maxSet: 0 };
+          const { grid: monthHeatmap, totalDays: monthTotalDays } = getMonthHeatmap(selectedRecapMonth);
+          const monthMaxDaily = getMonthMaxDaily(selectedRecapMonth);
+          
+          return (
+            <div 
+              className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setSelectedRecapMonth(null);
+                }
+              }}
+            >
+              <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <div 
+                  ref={recapCardRef}
+                  className="bg-white dark:bg-[#1a1a1a] rounded-xl p-6 space-y-4"
+                  style={{ minWidth: '300px' }}
+                >
+                  {/* Month Title */}
+                  <h2 className="text-2xl font-bold text-black dark:text-white text-center">
+                    {formatMonthName(selectedRecapMonth)}
+                  </h2>
+                  
+                  {/* User Name */}
+                  <p className="text-center text-gray-600 dark:text-gray-400 text-sm">
+                    {userDisplayName}
+                  </p>
+                  
+                  {/* Stats */}
+                  <div className="flex justify-center gap-6">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total</p>
+                      <p className="text-2xl font-bold text-black dark:text-white">
+                        {monthStats.total.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Max Set</p>
+                      <p className="text-2xl font-bold text-black dark:text-white">
+                        {monthStats.maxSet}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Month Heatmap */}
+                  <div className="flex justify-center">
+                    <div className="flex flex-col gap-[2px]">
+                      {monthHeatmap.map((row, rowIndex) => {
+                        // Calculate how many cells to render in this row
+                        // Only render cells that are part of the month (not trailing empty cells)
+                        const cellsInRow = rowIndex === monthHeatmap.length - 1 
+                          ? monthTotalDays % 7 || 7  // Last row: render only the days that exist
+                          : 7;  // Other rows: render all 7 cells
+                        
+                        return (
+                          <div key={rowIndex} className="flex gap-[2px]">
+                            {Array.from({ length: cellsInRow }, (_, colIndex) => {
+                              const day = row[colIndex];
+                              
+                              if (!day) {
+                                // This shouldn't happen for valid month days, but handle it
+                                return (
+                                  <div 
+                                    key={`empty-${rowIndex}-${colIndex}`}
+                                    className="w-[12px] h-[12px] bg-white dark:bg-[#1a1a1a] rounded-sm"
+                                  />
+                                );
+                              }
+                              
+                              const isPastEmpty = !day.isFuture && day.count === 0;
+                              // Use month-specific max daily for intensity calculation
+                              let colorClass: string;
+                              if (day.isFuture) {
+                                // Future days: very light gray (lighter than empty days, but visible)
+                                colorClass = 'bg-gray-100 dark:bg-gray-800';
+                              } else if (isPastEmpty) {
+                                // Past days with no pushups: medium gray
+                                colorClass = 'bg-gray-200 dark:bg-gray-700';
+                              } else if (monthMaxDaily === 0) {
+                                colorClass = 'bg-gray-200 dark:bg-gray-700';
+                              } else {
+                                const percentage = (day.count / monthMaxDaily) * 100;
+                                let opacityClass: string;
+                                if (percentage <= 20) opacityClass = 'opacity-20';
+                                else if (percentage <= 40) opacityClass = 'opacity-40';
+                                else if (percentage <= 60) opacityClass = 'opacity-60';
+                                else if (percentage <= 80) opacityClass = 'opacity-80';
+                                else opacityClass = 'opacity-100';
+                                
+                                const baseColorMap: Record<string, string> = {
+                                  red: 'bg-red-600', orange: 'bg-orange-600', amber: 'bg-amber-600',
+                                  yellow: 'bg-yellow-600', lime: 'bg-lime-600', green: 'bg-green-600',
+                                  emerald: 'bg-emerald-600', mint: 'bg-teal-400', teal: 'bg-teal-600',
+                                  cyan: 'bg-cyan-600', sky: 'bg-sky-600', blue: 'bg-blue-600',
+                                  indigo: 'bg-indigo-600', purple: 'bg-purple-600', violet: 'bg-violet-600',
+                                  pink: 'bg-pink-600', rose: 'bg-rose-600', coral: 'bg-orange-400',
+                                  brown: 'bg-amber-800', slate: 'bg-slate-600',
+                                };
+                                
+                                const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+                                colorClass = `${baseColor} ${opacityClass}`;
+                              }
+                              
+                              return (
+                                <div
+                                  key={`recap-${day.date.getFullYear()}-${day.date.getMonth()}-${day.date.getDate()}-${rowIndex}-${colIndex}`}
+                                  className={`w-[12px] h-[12px] rounded-sm ${colorClass}`}
+                                  title={`${day.date.toLocaleDateString()}: ${day.count} pushups`}
+                                />
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!recapCardRef.current) return;
+                      
+                      try {
+                        const canvas = await html2canvas(recapCardRef.current, {
+                          backgroundColor: '#ffffff',
+                          scale: 2,
+                        });
+                        
+                        canvas.toBlob(async (blob) => {
+                          if (!blob) return;
+                          
+                          const file = new File([blob], `pushup-recap-${selectedRecapMonth}.png`, { type: 'image/png' });
+                          
+                          if (navigator.share && navigator.canShare({ files: [file] })) {
+                            await navigator.share({
+                              title: `${formatMonthName(selectedRecapMonth)} Recap`,
+                              files: [file],
+                            });
+                          } else {
+                            // Fallback: download image
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `pushup-recap-${selectedRecapMonth}.png`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }
+                        });
+                      } catch (error) {
+                        console.error('Error generating image:', error);
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-semibold hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Share
+                  </button>
+                  <button
+                    onClick={() => setSelectedRecapMonth(null)}
+                    className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#333] text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    <X className="w-4 h-4" />
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
