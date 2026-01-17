@@ -40,7 +40,7 @@ export default function LeaderboardPage() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
   const [userChartData, setUserChartData] = useState<Map<string, DailyData[]>>(new Map());
   const [sortBy, setSortBy] = useState<'monthly' | 'daily' | 'maxSet'>('monthly');
-  const [userProfileColor, setUserProfileColor] = useState<string>('green');
+  const [userProfileColor, setUserProfileColor] = useState<string>('mint');
   const [userProfileColors, setUserProfileColors] = useState<Map<string, string>>(new Map());
   const [selectedDayByUser, setSelectedDayByUser] = useState<Map<string, {day: number, count: number, date: Date}>>(new Map());
   const [userMaxDailyInMonth, setUserMaxDailyInMonth] = useState<Map<string, number>>(new Map());
@@ -152,7 +152,7 @@ export default function LeaderboardPage() {
         throw error;
       }
 
-      setUserProfileColor(data?.profile_color || 'green');
+      setUserProfileColor(data?.profile_color || 'mint');
     } catch (error) {
       console.error('Error fetching user profile color:', error);
       // Default to green if there's any error
@@ -183,7 +183,7 @@ export default function LeaderboardPage() {
 
       const colorMap = new Map<string, string>();
       data?.forEach(profile => {
-        colorMap.set(profile.id, profile.profile_color || 'green');
+        colorMap.set(profile.id, profile.profile_color || 'mint');
       });
       // Set default for any missing users
       userIds.forEach(id => {
@@ -1170,58 +1170,58 @@ export default function LeaderboardPage() {
     
     // Base color map (single color per profile color)
     const baseColorMap: Record<string, string> = {
-      red: 'bg-red-600',
-      orange: 'bg-orange-600',
-      amber: 'bg-amber-600',
-      yellow: 'bg-yellow-600',
-      lime: 'bg-lime-600',
-      green: 'bg-green-600',
-      emerald: 'bg-emerald-600',
-      mint: 'bg-teal-400',
-      teal: 'bg-teal-600',
-      cyan: 'bg-cyan-600',
-      sky: 'bg-sky-600',
-      blue: 'bg-blue-600',
-      indigo: 'bg-indigo-600',
-      purple: 'bg-purple-600',
-      violet: 'bg-violet-600',
-      pink: 'bg-pink-600',
-      rose: 'bg-rose-600',
-      coral: 'bg-orange-400',
-      brown: 'bg-amber-800',
-      slate: 'bg-slate-600',
+      'mint': 'bg-emerald-500',
+      'sky': 'bg-sky-500',
+      'indigo': 'bg-indigo-500',
+      'coral': 'bg-orange-400',
+      'sage': 'bg-green-600',
+      'teal': 'bg-teal-600',
+      'grape': 'bg-purple-500',
+      'amber': 'bg-amber-600',
+      'rose': 'bg-rose-600',
+      'azure': 'bg-sky-500',
+      'emerald': 'bg-emerald-500',
+      'mango': 'bg-amber-500',
+      'slate': 'bg-slate-500',
+      'lilac': 'bg-purple-500',
+      'crimson': 'bg-red-600',
+      'turquoise': 'bg-cyan-500',
+      'clay': 'bg-red-600',
+      'forest': 'bg-green-700',
+      'violet': 'bg-violet-600',
+      'ocean': 'bg-blue-600',
     };
     
-    const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+    const baseColor = baseColorMap[profileColor] || baseColorMap['mint'];
     
     return `${baseColor} ${opacityClass}`;
   };
 
   const getProfileColorClasses = (color: string) => {
     const colorMap: Record<string, { border: string; bg: string; badge: string }> = {
-      red: { border: 'border-red-600 dark:border-red-500', bg: 'bg-red-50 dark:bg-red-900/20', badge: 'bg-red-600 dark:bg-red-500' },
-      orange: { border: 'border-orange-600 dark:border-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20', badge: 'bg-orange-600 dark:bg-orange-500' },
-      amber: { border: 'border-amber-600 dark:border-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', badge: 'bg-amber-600 dark:bg-amber-500' },
-      yellow: { border: 'border-yellow-600 dark:border-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20', badge: 'bg-yellow-600 dark:bg-yellow-500' },
-      lime: { border: 'border-lime-600 dark:border-lime-500', bg: 'bg-lime-50 dark:bg-lime-900/20', badge: 'bg-lime-600 dark:bg-lime-500' },
-      green: { border: 'border-green-600 dark:border-green-500', bg: 'bg-green-50 dark:bg-green-900/20', badge: 'bg-green-600 dark:bg-green-500' },
-      emerald: { border: 'border-emerald-600 dark:border-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-600 dark:bg-emerald-500' },
-      mint: { border: 'border-teal-400 dark:border-teal-300', bg: 'bg-teal-50 dark:bg-teal-900/20', badge: 'bg-teal-400 dark:bg-teal-300' },
-      teal: { border: 'border-teal-600 dark:border-teal-500', bg: 'bg-teal-50 dark:bg-teal-900/20', badge: 'bg-teal-600 dark:bg-teal-500' },
-      cyan: { border: 'border-cyan-600 dark:border-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/20', badge: 'bg-cyan-600 dark:bg-cyan-500' },
-      sky: { border: 'border-sky-600 dark:border-sky-500', bg: 'bg-sky-50 dark:bg-sky-900/20', badge: 'bg-sky-600 dark:bg-sky-500' },
-      blue: { border: 'border-blue-600 dark:border-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20', badge: 'bg-blue-600 dark:bg-blue-500' },
-      indigo: { border: 'border-indigo-600 dark:border-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/20', badge: 'bg-indigo-600 dark:bg-indigo-500' },
-      purple: { border: 'border-purple-600 dark:border-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', badge: 'bg-purple-600 dark:bg-purple-500' },
-      violet: { border: 'border-violet-600 dark:border-violet-500', bg: 'bg-violet-50 dark:bg-violet-900/20', badge: 'bg-violet-600 dark:bg-violet-500' },
-      pink: { border: 'border-pink-600 dark:border-pink-500', bg: 'bg-pink-50 dark:bg-pink-900/20', badge: 'bg-pink-600 dark:bg-pink-500' },
-      rose: { border: 'border-rose-600 dark:border-rose-500', bg: 'bg-rose-50 dark:bg-rose-900/20', badge: 'bg-rose-600 dark:bg-rose-500' },
-      coral: { border: 'border-orange-400 dark:border-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/20', badge: 'bg-orange-400 dark:bg-orange-300' },
-      brown: { border: 'border-amber-800 dark:border-amber-700', bg: 'bg-amber-50 dark:bg-amber-900/20', badge: 'bg-amber-800 dark:bg-amber-700' },
-      slate: { border: 'border-slate-600 dark:border-slate-500', bg: 'bg-slate-50 dark:bg-slate-900/20', badge: 'bg-slate-600 dark:bg-slate-500' },
+      'mint': { border: 'border-emerald-500 dark:border-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-500 dark:bg-emerald-400' },
+      'sky': { border: 'border-sky-500 dark:border-sky-400', bg: 'bg-sky-50 dark:bg-sky-900/20', badge: 'bg-sky-500 dark:bg-sky-400' },
+      'indigo': { border: 'border-indigo-500 dark:border-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', badge: 'bg-indigo-500 dark:bg-indigo-400' },
+      'coral': { border: 'border-orange-400 dark:border-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/20', badge: 'bg-orange-400 dark:bg-orange-300' },
+      'sage': { border: 'border-green-600 dark:border-green-500', bg: 'bg-green-50 dark:bg-green-900/20', badge: 'bg-green-600 dark:bg-green-500' },
+      'teal': { border: 'border-teal-600 dark:border-teal-500', bg: 'bg-teal-50 dark:bg-teal-900/20', badge: 'bg-teal-600 dark:bg-teal-500' },
+      'grape': { border: 'border-purple-500 dark:border-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20', badge: 'bg-purple-500 dark:bg-purple-400' },
+      'amber': { border: 'border-amber-600 dark:border-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', badge: 'bg-amber-600 dark:bg-amber-500' },
+      'rose': { border: 'border-rose-600 dark:border-rose-500', bg: 'bg-rose-50 dark:bg-rose-900/20', badge: 'bg-rose-600 dark:bg-rose-500' },
+      'azure': { border: 'border-sky-500 dark:border-sky-400', bg: 'bg-sky-50 dark:bg-sky-900/20', badge: 'bg-sky-500 dark:bg-sky-400' },
+      'emerald': { border: 'border-emerald-500 dark:border-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-500 dark:bg-emerald-400' },
+      'mango': { border: 'border-amber-500 dark:border-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20', badge: 'bg-amber-500 dark:bg-amber-400' },
+      'slate': { border: 'border-slate-500 dark:border-slate-400', bg: 'bg-slate-50 dark:bg-slate-900/20', badge: 'bg-slate-500 dark:bg-slate-400' },
+      'lilac': { border: 'border-purple-500 dark:border-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20', badge: 'bg-purple-500 dark:bg-purple-400' },
+      'crimson': { border: 'border-red-600 dark:border-red-500', bg: 'bg-red-50 dark:bg-red-900/20', badge: 'bg-red-600 dark:bg-red-500' },
+      'turquoise': { border: 'border-cyan-500 dark:border-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-900/20', badge: 'bg-cyan-500 dark:bg-cyan-400' },
+      'clay': { border: 'border-red-600 dark:border-red-500', bg: 'bg-red-50 dark:bg-red-900/20', badge: 'bg-red-600 dark:bg-red-500' },
+      'forest': { border: 'border-green-700 dark:border-green-600', bg: 'bg-green-50 dark:bg-green-900/20', badge: 'bg-green-700 dark:bg-green-600' },
+      'violet': { border: 'border-violet-600 dark:border-violet-500', bg: 'bg-violet-50 dark:bg-violet-900/20', badge: 'bg-violet-600 dark:bg-violet-500' },
+      'ocean': { border: 'border-blue-600 dark:border-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20', badge: 'bg-blue-600 dark:bg-blue-500' },
     };
 
-    return colorMap[color] || colorMap.green;
+    return colorMap[color] || colorMap['mint'];
   };
 
   const memberLeaderboardIds = new Set(userLeaderboards.map(board => board.id));

@@ -48,7 +48,7 @@ export default function HistoryPage() {
   const [savingDays, setSavingDays] = useState<Set<string>>(new Set());
   
   // Heatmap state
-  const [profileColor, setProfileColor] = useState<string>('green');
+  const [profileColor, setProfileColor] = useState<string>('mint');
   const [heatmapDays, setHeatmapDays] = useState<HeatmapDay[]>([]);
   const [maxDailyPushups, setMaxDailyPushups] = useState<number>(0);
   const [monthlyStats, setMonthlyStats] = useState<Map<string, MonthlyStats>>(new Map());
@@ -344,13 +344,13 @@ export default function HistoryPage() {
 
       if (error) {
         if (error.message?.includes('column') || error.message?.includes('does not exist')) {
-          setProfileColor('green');
+          setProfileColor('mint');
           return;
         }
         throw error;
       }
 
-      setProfileColor(data?.profile_color || 'green');
+      setProfileColor(data?.profile_color || 'mint');
     } catch (error) {
       console.error('Error fetching user profile color:', error);
       setProfileColor('green');
@@ -407,29 +407,29 @@ export default function HistoryPage() {
     
     // Base color map (single color per profile color)
     const baseColorMap: Record<string, string> = {
-      red: 'bg-red-600',
-      orange: 'bg-orange-600',
-      amber: 'bg-amber-600',
-      yellow: 'bg-yellow-600',
-      lime: 'bg-lime-600',
-      green: 'bg-green-600',
-      emerald: 'bg-emerald-600',
-      mint: 'bg-teal-400',
-      teal: 'bg-teal-600',
-      cyan: 'bg-cyan-600',
-      sky: 'bg-sky-600',
-      blue: 'bg-blue-600',
-      indigo: 'bg-indigo-600',
-      purple: 'bg-purple-600',
-      violet: 'bg-violet-600',
-      pink: 'bg-pink-600',
-      rose: 'bg-rose-600',
-      coral: 'bg-orange-400',
-      brown: 'bg-amber-800',
-      slate: 'bg-slate-600',
+      'mint': 'bg-emerald-500',
+      'sky': 'bg-sky-500',
+      'indigo': 'bg-indigo-500',
+      'coral': 'bg-orange-400',
+      'sage': 'bg-green-600',
+      'teal': 'bg-teal-600',
+      'grape': 'bg-purple-500',
+      'amber': 'bg-amber-600',
+      'rose': 'bg-rose-600',
+      'azure': 'bg-sky-500',
+      'emerald': 'bg-emerald-500',
+      'mango': 'bg-amber-500',
+      'slate': 'bg-slate-500',
+      'lilac': 'bg-purple-500',
+      'crimson': 'bg-red-600',
+      'turquoise': 'bg-cyan-500',
+      'clay': 'bg-red-600',
+      'forest': 'bg-green-700',
+      'violet': 'bg-violet-600',
+      'ocean': 'bg-blue-600',
     };
     
-    const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+    const baseColor = baseColorMap[profileColor] || baseColorMap['mint'];
     
     return `${baseColor} ${opacityClass}`;
   };
@@ -1741,16 +1741,16 @@ export default function HistoryPage() {
                                 else opacityClass = 'opacity-100';
                                 
                                 const baseColorMap: Record<string, string> = {
-                                  red: 'bg-red-600', orange: 'bg-orange-600', amber: 'bg-amber-600',
-                                  yellow: 'bg-yellow-600', lime: 'bg-lime-600', green: 'bg-green-600',
-                                  emerald: 'bg-emerald-600', mint: 'bg-teal-400', teal: 'bg-teal-600',
-                                  cyan: 'bg-cyan-600', sky: 'bg-sky-600', blue: 'bg-blue-600',
-                                  indigo: 'bg-indigo-600', purple: 'bg-purple-600', violet: 'bg-violet-600',
-                                  pink: 'bg-pink-600', rose: 'bg-rose-600', coral: 'bg-orange-400',
-                                  brown: 'bg-amber-800', slate: 'bg-slate-600',
+                                  'mint': 'bg-emerald-500', 'sky': 'bg-sky-500', 'indigo': 'bg-indigo-500',
+                                  'coral': 'bg-orange-400', 'sage': 'bg-green-600', 'teal': 'bg-teal-600',
+                                  'grape': 'bg-purple-500', 'amber': 'bg-amber-600', 'rose': 'bg-rose-600',
+                                  'azure': 'bg-sky-500', 'emerald': 'bg-emerald-500', 'mango': 'bg-amber-500',
+                                  'slate': 'bg-slate-500', 'lilac': 'bg-purple-500', 'crimson': 'bg-red-600',
+                                  'turquoise': 'bg-cyan-500', 'clay': 'bg-red-600', 'forest': 'bg-green-700',
+                                  'violet': 'bg-violet-600', 'ocean': 'bg-blue-600',
                                 };
                                 
-                                const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+                                const baseColor = baseColorMap[profileColor] || baseColorMap['mint'];
                                 colorClass = `${baseColor} ${opacityClass}`;
                               }
                               

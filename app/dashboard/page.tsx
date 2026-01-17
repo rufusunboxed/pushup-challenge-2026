@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [monthlyHeatmap, setMonthlyHeatmap] = useState<{ day: number; count: number }[]>([]);
   const [monthlyMaxDaily, setMonthlyMaxDaily] = useState(0);
   const [limitError, setLimitError] = useState<string | null>(null);
-  const [profileColor, setProfileColor] = useState<string>('green');
+  const [profileColor, setProfileColor] = useState<string>('mint');
   const [profileColorLoaded, setProfileColorLoaded] = useState<boolean>(false);
   const [animationType, setAnimationType] = useState<'none' | 'plus1' | 'plus5' | 'submit'>('none');
   const [numberAnimating, setNumberAnimating] = useState<boolean>(false);
@@ -145,7 +145,7 @@ export default function DashboardPage() {
             .eq('id', user.id)
             .single();
           
-          const color = colorData?.profile_color || 'green';
+          const color = colorData?.profile_color || 'mint';
           setProfileColor(color);
           setProfileColorLoaded(true);
         } else {
@@ -154,13 +154,13 @@ export default function DashboardPage() {
       } else {
         setUserProfile(data);
         // Set profile color immediately if available
-        const color = data?.profile_color || 'green';
+        const color = data?.profile_color || 'mint';
         setProfileColor(color);
         setProfileColorLoaded(true);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      setProfileColor('green');
+      setProfileColor('mint');
       setProfileColorLoaded(true);
     }
   };
@@ -418,58 +418,61 @@ export default function DashboardPage() {
   // Helper function to get button classes based on profile color
   const getButtonColorClasses = (color: string) => {
     const colorMap: Record<string, { bg: string; hover: string; shadow: string; text: string; darkText: string }> = {
-      red: { bg: 'bg-red-600', hover: 'hover:bg-red-700', shadow: 'shadow-red-500/20', text: 'text-red-600', darkText: 'dark:text-red-400' },
-      orange: { bg: 'bg-orange-600', hover: 'hover:bg-orange-700', shadow: 'shadow-orange-500/20', text: 'text-orange-600', darkText: 'dark:text-orange-400' },
-      amber: { bg: 'bg-amber-600', hover: 'hover:bg-amber-700', shadow: 'shadow-amber-500/20', text: 'text-amber-600', darkText: 'dark:text-amber-400' },
-      yellow: { bg: 'bg-yellow-600', hover: 'hover:bg-yellow-700', shadow: 'shadow-yellow-500/20', text: 'text-yellow-600', darkText: 'dark:text-yellow-400' },
-      lime: { bg: 'bg-lime-600', hover: 'hover:bg-lime-700', shadow: 'shadow-lime-500/20', text: 'text-lime-600', darkText: 'dark:text-lime-400' },
-      green: { bg: 'bg-green-600', hover: 'hover:bg-green-700', shadow: 'shadow-green-500/20', text: 'text-green-600', darkText: 'dark:text-green-400' },
-      emerald: { bg: 'bg-emerald-600', hover: 'hover:bg-emerald-700', shadow: 'shadow-emerald-500/20', text: 'text-emerald-600', darkText: 'dark:text-emerald-400' },
-      mint: { bg: 'bg-teal-400', hover: 'hover:bg-teal-500', shadow: 'shadow-teal-300/20', text: 'text-teal-600', darkText: 'dark:text-teal-300' },
-      teal: { bg: 'bg-teal-600', hover: 'hover:bg-teal-700', shadow: 'shadow-teal-500/20', text: 'text-teal-600', darkText: 'dark:text-teal-400' },
-      cyan: { bg: 'bg-cyan-600', hover: 'hover:bg-cyan-700', shadow: 'shadow-cyan-500/20', text: 'text-cyan-600', darkText: 'dark:text-cyan-400' },
-      sky: { bg: 'bg-sky-600', hover: 'hover:bg-sky-700', shadow: 'shadow-sky-500/20', text: 'text-sky-600', darkText: 'dark:text-sky-400' },
-      blue: { bg: 'bg-blue-600', hover: 'hover:bg-blue-700', shadow: 'shadow-blue-500/20', text: 'text-blue-600', darkText: 'dark:text-blue-400' },
-      indigo: { bg: 'bg-indigo-600', hover: 'hover:bg-indigo-700', shadow: 'shadow-indigo-500/20', text: 'text-indigo-600', darkText: 'dark:text-indigo-400' },
-      purple: { bg: 'bg-purple-600', hover: 'hover:bg-purple-700', shadow: 'shadow-purple-500/20', text: 'text-purple-600', darkText: 'dark:text-purple-400' },
-      violet: { bg: 'bg-violet-600', hover: 'hover:bg-violet-700', shadow: 'shadow-violet-500/20', text: 'text-violet-600', darkText: 'dark:text-violet-400' },
-      pink: { bg: 'bg-pink-600', hover: 'hover:bg-pink-700', shadow: 'shadow-pink-500/20', text: 'text-pink-600', darkText: 'dark:text-pink-400' },
-      rose: { bg: 'bg-rose-600', hover: 'hover:bg-rose-700', shadow: 'shadow-rose-500/20', text: 'text-rose-600', darkText: 'dark:text-rose-400' },
-      coral: { bg: 'bg-orange-400', hover: 'hover:bg-orange-500', shadow: 'shadow-orange-300/20', text: 'text-orange-600', darkText: 'dark:text-orange-300' },
-      brown: { bg: 'bg-amber-800', hover: 'hover:bg-amber-900', shadow: 'shadow-amber-700/20', text: 'text-amber-800', darkText: 'dark:text-amber-600' },
-      slate: { bg: 'bg-slate-600', hover: 'hover:bg-slate-700', shadow: 'shadow-slate-500/20', text: 'text-slate-600', darkText: 'dark:text-slate-400' },
+      'mint': { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', shadow: 'shadow-emerald-400/20', text: 'text-emerald-600', darkText: 'dark:text-emerald-400' },
+      'sky': { bg: 'bg-sky-500', hover: 'hover:bg-sky-600', shadow: 'shadow-sky-400/20', text: 'text-sky-600', darkText: 'dark:text-sky-400' },
+      'indigo': { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', shadow: 'shadow-indigo-400/20', text: 'text-indigo-600', darkText: 'dark:text-indigo-400' },
+      'coral': { bg: 'bg-orange-400', hover: 'hover:bg-orange-500', shadow: 'shadow-orange-300/20', text: 'text-orange-600', darkText: 'dark:text-orange-300' },
+      'sage': { bg: 'bg-green-600', hover: 'hover:bg-green-700', shadow: 'shadow-green-500/20', text: 'text-green-600', darkText: 'dark:text-green-400' },
+      'teal': { bg: 'bg-teal-600', hover: 'hover:bg-teal-700', shadow: 'shadow-teal-500/20', text: 'text-teal-600', darkText: 'dark:text-teal-400' },
+      'grape': { bg: 'bg-purple-500', hover: 'hover:bg-purple-600', shadow: 'shadow-purple-400/20', text: 'text-purple-600', darkText: 'dark:text-purple-400' },
+      'amber': { bg: 'bg-amber-600', hover: 'hover:bg-amber-700', shadow: 'shadow-amber-500/20', text: 'text-amber-600', darkText: 'dark:text-amber-400' },
+      'rose': { bg: 'bg-rose-600', hover: 'hover:bg-rose-700', shadow: 'shadow-rose-500/20', text: 'text-rose-600', darkText: 'dark:text-rose-400' },
+      'azure': { bg: 'bg-sky-500', hover: 'hover:bg-sky-600', shadow: 'shadow-sky-400/20', text: 'text-sky-600', darkText: 'dark:text-sky-400' },
+      'emerald': { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', shadow: 'shadow-emerald-400/20', text: 'text-emerald-600', darkText: 'dark:text-emerald-400' },
+      'mango': { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', shadow: 'shadow-amber-400/20', text: 'text-amber-600', darkText: 'dark:text-amber-400' },
+      'slate': { bg: 'bg-slate-500', hover: 'hover:bg-slate-600', shadow: 'shadow-slate-400/20', text: 'text-slate-600', darkText: 'dark:text-slate-400' },
+      'lilac': { bg: 'bg-purple-500', hover: 'hover:bg-purple-600', shadow: 'shadow-purple-400/20', text: 'text-purple-600', darkText: 'dark:text-purple-400' },
+      'crimson': { bg: 'bg-red-600', hover: 'hover:bg-red-700', shadow: 'shadow-red-500/20', text: 'text-red-600', darkText: 'dark:text-red-400' },
+      'turquoise': { bg: 'bg-cyan-500', hover: 'hover:bg-cyan-600', shadow: 'shadow-cyan-400/20', text: 'text-cyan-600', darkText: 'dark:text-cyan-400' },
+      'clay': { bg: 'bg-red-600', hover: 'hover:bg-red-700', shadow: 'shadow-red-500/20', text: 'text-red-600', darkText: 'dark:text-red-400' },
+      'forest': { bg: 'bg-green-700', hover: 'hover:bg-green-800', shadow: 'shadow-green-600/20', text: 'text-green-700', darkText: 'dark:text-green-400' },
+      'violet': { bg: 'bg-violet-600', hover: 'hover:bg-violet-700', shadow: 'shadow-violet-500/20', text: 'text-violet-600', darkText: 'dark:text-violet-400' },
+      'ocean': { bg: 'bg-blue-600', hover: 'hover:bg-blue-700', shadow: 'shadow-blue-500/20', text: 'text-blue-600', darkText: 'dark:text-blue-400' },
     };
 
-    return colorMap[color] || colorMap.green;
+    return colorMap[color] || colorMap['mint'];
   };
 
   const buttonColors = getButtonColorClasses(profileColor);
 
   // Get RGB color for glow effect based on profile color
   const getGlowColor = (color: string): string => {
-    const colorMap: Record<string, string> = {
-      red: '239, 68, 68', // red-500
-      orange: '249, 115, 22', // orange-500
-      amber: '245, 158, 11', // amber-500
-      yellow: '234, 179, 8', // yellow-500
-      lime: '132, 204, 22', // lime-500
-      green: '34, 197, 94', // green-500
-      emerald: '16, 185, 129', // emerald-500
-      mint: '94, 234, 212', // teal-300
-      teal: '20, 184, 166', // teal-500
-      cyan: '6, 182, 212', // cyan-500
-      sky: '14, 165, 233', // sky-500
-      blue: '37, 99, 235', // blue-500
-      indigo: '99, 102, 241', // indigo-500
-      purple: '168, 85, 247', // purple-500
-      violet: '139, 92, 246', // violet-500
-      pink: '236, 72, 153', // pink-500
-      rose: '244, 63, 94', // rose-500
-      coral: '251, 146, 60', // orange-300
-      brown: '180, 83, 9', // amber-700
-      slate: '100, 116, 139', // slate-500
+    const hexMap: Record<string, string> = {
+      'mint': '#3EB489',
+      'sky': '#3498DB',
+      'indigo': '#6366F1',
+      'coral': '#FF7F50',
+      'sage': '#778E5C',
+      'teal': '#0D9488',
+      'grape': '#8B5CF6',
+      'amber': '#D97706',
+      'rose': '#E11D48',
+      'azure': '#0EA5E9',
+      'emerald': '#10B981',
+      'mango': '#F59E0B',
+      'slate': '#64748B',
+      'lilac': '#A855F7',
+      'crimson': '#DC2626',
+      'turquoise': '#06B6D4',
+      'clay': '#A75D5D',
+      'forest': '#2D6A4F',
+      'violet': '#7C3AED',
+      'ocean': '#0284C7',
     };
-    return colorMap[color] || colorMap.green;
+    const hex = hexMap[color] || hexMap['mint'];
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!result) return '62, 180, 137'; // Default to mint
+    return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
   };
 
   const getHeatmapColorClasses = (countValue: number, maxDailyInMonth: number) => {
@@ -486,29 +489,29 @@ export default function DashboardPage() {
     else opacityClass = 'opacity-100';
 
     const baseColorMap: Record<string, string> = {
-      red: 'bg-red-600',
-      orange: 'bg-orange-600',
-      amber: 'bg-amber-600',
-      yellow: 'bg-yellow-600',
-      lime: 'bg-lime-600',
-      green: 'bg-green-600',
-      emerald: 'bg-emerald-600',
-      mint: 'bg-teal-400',
-      teal: 'bg-teal-600',
-      cyan: 'bg-cyan-600',
-      sky: 'bg-sky-600',
-      blue: 'bg-blue-600',
-      indigo: 'bg-indigo-600',
-      purple: 'bg-purple-600',
-      violet: 'bg-violet-600',
-      pink: 'bg-pink-600',
-      rose: 'bg-rose-600',
-      coral: 'bg-orange-400',
-      brown: 'bg-amber-800',
-      slate: 'bg-slate-600',
+      'mint': 'bg-emerald-500',
+      'sky': 'bg-sky-500',
+      'indigo': 'bg-indigo-500',
+      'coral': 'bg-orange-400',
+      'sage': 'bg-green-600',
+      'teal': 'bg-teal-600',
+      'grape': 'bg-purple-500',
+      'amber': 'bg-amber-600',
+      'rose': 'bg-rose-600',
+      'azure': 'bg-sky-500',
+      'emerald': 'bg-emerald-500',
+      'mango': 'bg-amber-500',
+      'slate': 'bg-slate-500',
+      'lilac': 'bg-purple-500',
+      'crimson': 'bg-red-600',
+      'turquoise': 'bg-cyan-500',
+      'clay': 'bg-red-600',
+      'forest': 'bg-green-700',
+      'violet': 'bg-violet-600',
+      'ocean': 'bg-blue-600',
     };
 
-    const baseColor = baseColorMap[profileColor] || baseColorMap.green;
+    const baseColor = baseColorMap[profileColor] || baseColorMap['mint'];
     return `${baseColor} ${opacityClass}`;
   };
 

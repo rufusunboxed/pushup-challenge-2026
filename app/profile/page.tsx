@@ -7,26 +7,26 @@ import { LogoutButton } from '@/components/LogoutButton';
 import { Save, Loader2 } from 'lucide-react';
 
 const PROFILE_COLORS = [
-  { name: 'red', label: 'Red', bg: 'bg-red-600', darkBg: 'bg-red-500' },
-  { name: 'orange', label: 'Orange', bg: 'bg-orange-600', darkBg: 'bg-orange-500' },
-  { name: 'amber', label: 'Amber', bg: 'bg-amber-600', darkBg: 'bg-amber-500' },
-  { name: 'yellow', label: 'Yellow', bg: 'bg-yellow-600', darkBg: 'bg-yellow-500' },
-  { name: 'lime', label: 'Lime', bg: 'bg-lime-600', darkBg: 'bg-lime-500' },
-  { name: 'green', label: 'Green', bg: 'bg-green-600', darkBg: 'bg-green-500' },
-  { name: 'emerald', label: 'Emerald', bg: 'bg-emerald-600', darkBg: 'bg-emerald-500' },
-  { name: 'mint', label: 'Mint', bg: 'bg-teal-400', darkBg: 'bg-teal-300' },
-  { name: 'teal', label: 'Teal', bg: 'bg-teal-600', darkBg: 'bg-teal-500' },
-  { name: 'cyan', label: 'Cyan', bg: 'bg-cyan-600', darkBg: 'bg-cyan-500' },
-  { name: 'sky', label: 'Sky', bg: 'bg-sky-600', darkBg: 'bg-sky-500' },
-  { name: 'blue', label: 'Blue', bg: 'bg-blue-600', darkBg: 'bg-blue-500' },
-  { name: 'indigo', label: 'Indigo', bg: 'bg-indigo-600', darkBg: 'bg-indigo-500' },
-  { name: 'purple', label: 'Purple', bg: 'bg-purple-600', darkBg: 'bg-purple-500' },
-  { name: 'violet', label: 'Violet', bg: 'bg-violet-600', darkBg: 'bg-violet-500' },
-  { name: 'pink', label: 'Pink', bg: 'bg-pink-600', darkBg: 'bg-pink-500' },
-  { name: 'rose', label: 'Rose', bg: 'bg-rose-600', darkBg: 'bg-rose-500' },
-  { name: 'coral', label: 'Coral', bg: 'bg-orange-400', darkBg: 'bg-orange-300' },
-  { name: 'brown', label: 'Brown', bg: 'bg-amber-800', darkBg: 'bg-amber-700' },
-  { name: 'slate', label: 'Slate', bg: 'bg-slate-600', darkBg: 'bg-slate-500' },
+  { name: 'mint', label: 'Mint', hex: '#3EB489' },
+  { name: 'sky', label: 'Sky', hex: '#3498DB' },
+  { name: 'indigo', label: 'Indigo', hex: '#6366F1' },
+  { name: 'coral', label: 'Coral', hex: '#FF7F50' },
+  { name: 'sage', label: 'Sage', hex: '#778E5C' },
+  { name: 'teal', label: 'Teal', hex: '#0D9488' },
+  { name: 'grape', label: 'Grape', hex: '#8B5CF6' },
+  { name: 'amber', label: 'Amber', hex: '#D97706' },
+  { name: 'rose', label: 'Rose', hex: '#E11D48' },
+  { name: 'azure', label: 'Azure', hex: '#0EA5E9' },
+  { name: 'emerald', label: 'Emerald', hex: '#10B981' },
+  { name: 'mango', label: 'Mango', hex: '#F59E0B' },
+  { name: 'slate', label: 'Slate', hex: '#64748B' },
+  { name: 'lilac', label: 'Lilac', hex: '#A855F7' },
+  { name: 'crimson', label: 'Crimson', hex: '#DC2626' },
+  { name: 'turquoise', label: 'Turquoise', hex: '#06B6D4' },
+  { name: 'clay', label: 'Clay', hex: '#A75D5D' },
+  { name: 'forest', label: 'Forest', hex: '#2D6A4F' },
+  { name: 'violet', label: 'Violet', hex: '#7C3AED' },
+  { name: 'ocean', label: 'Ocean', hex: '#0284C7' },
 ] as const;
 
 interface OwnedLeaderboard {
@@ -49,7 +49,7 @@ export default function ProfilePage() {
   const [newEmail, setNewEmail] = useState('');
   const [emailEditing, setEmailEditing] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
-  const [profileColor, setProfileColor] = useState('green');
+  const [profileColor, setProfileColor] = useState('mint');
   const [colorSaving, setColorSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export default function ProfilePage() {
 
       // Try to get display_name and profile_color if columns exist
       let displayName = null;
-      let profileColor = 'green';
+        let profileColor = 'mint';
       
       const extendedResult = await supabase
         .from('profiles')
@@ -113,7 +113,7 @@ export default function ProfilePage() {
       
       if (!extendedResult.error && extendedResult.data) {
         displayName = extendedResult.data.display_name;
-        profileColor = extendedResult.data.profile_color || 'green';
+        profileColor = extendedResult.data.profile_color || 'mint';
       }
 
       // Set profile with available data
@@ -520,7 +520,10 @@ export default function ProfilePage() {
                             : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        <div className={`w-full h-10 rounded-lg ${color.bg} dark:${color.darkBg}`} />
+                        <div 
+                          className="w-full h-10 rounded-lg" 
+                          style={{ backgroundColor: color.hex }}
+                        />
                         <p className="mt-1.5 text-[10px] font-medium text-black dark:text-white text-center">
                           {color.label}
                         </p>

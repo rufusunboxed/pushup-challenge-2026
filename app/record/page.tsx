@@ -11,7 +11,7 @@ export default function RecordPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [profileColor, setProfileColor] = useState<string>('green');
+  const [profileColor, setProfileColor] = useState<string>('mint');
   const [profileColorLoaded, setProfileColorLoaded] = useState<boolean>(false);
   const [tapAnimation, setTapAnimation] = useState<boolean>(false);
 
@@ -111,14 +111,14 @@ export default function RecordPage() {
       if (error) {
         // If column doesn't exist, use default
         if (error.message?.includes('column') || error.message?.includes('does not exist')) {
-          setProfileColor('green');
+          setProfileColor('mint');
           setProfileColorLoaded(true);
           return;
         }
         throw error;
       }
 
-      setProfileColor(data?.profile_color || 'green');
+      setProfileColor(data?.profile_color || 'mint');
       setProfileColorLoaded(true);
     } catch (error) {
       console.error('Error fetching profile color:', error);
@@ -177,29 +177,29 @@ export default function RecordPage() {
   // Helper function to get button color classes based on profile color
   const getButtonColorClasses = (color: string) => {
     const colorMap: Record<string, { bg: string; hover: string; border: string; text: string }> = {
-      red: { bg: 'bg-red-600', hover: 'hover:bg-red-700', border: 'border-red-600', text: 'text-red-600' },
-      orange: { bg: 'bg-orange-600', hover: 'hover:bg-orange-700', border: 'border-orange-600', text: 'text-orange-600' },
-      amber: { bg: 'bg-amber-600', hover: 'hover:bg-amber-700', border: 'border-amber-600', text: 'text-amber-600' },
-      yellow: { bg: 'bg-yellow-600', hover: 'hover:bg-yellow-700', border: 'border-yellow-600', text: 'text-yellow-600' },
-      lime: { bg: 'bg-lime-600', hover: 'hover:bg-lime-700', border: 'border-lime-600', text: 'text-lime-600' },
-      green: { bg: 'bg-green-600', hover: 'hover:bg-green-700', border: 'border-green-600', text: 'text-green-600' },
-      emerald: { bg: 'bg-emerald-600', hover: 'hover:bg-emerald-700', border: 'border-emerald-600', text: 'text-emerald-600' },
-      mint: { bg: 'bg-teal-400', hover: 'hover:bg-teal-500', border: 'border-teal-400', text: 'text-teal-600' },
-      teal: { bg: 'bg-teal-600', hover: 'hover:bg-teal-700', border: 'border-teal-600', text: 'text-teal-600' },
-      cyan: { bg: 'bg-cyan-600', hover: 'hover:bg-cyan-700', border: 'border-cyan-600', text: 'text-cyan-600' },
-      sky: { bg: 'bg-sky-600', hover: 'hover:bg-sky-700', border: 'border-sky-600', text: 'text-sky-600' },
-      blue: { bg: 'bg-blue-600', hover: 'hover:bg-blue-700', border: 'border-blue-600', text: 'text-blue-600' },
-      indigo: { bg: 'bg-indigo-600', hover: 'hover:bg-indigo-700', border: 'border-indigo-600', text: 'text-indigo-600' },
-      purple: { bg: 'bg-purple-600', hover: 'hover:bg-purple-700', border: 'border-purple-600', text: 'text-purple-600' },
-      violet: { bg: 'bg-violet-600', hover: 'hover:bg-violet-700', border: 'border-violet-600', text: 'text-violet-600' },
-      pink: { bg: 'bg-pink-600', hover: 'hover:bg-pink-700', border: 'border-pink-600', text: 'text-pink-600' },
-      rose: { bg: 'bg-rose-600', hover: 'hover:bg-rose-700', border: 'border-rose-600', text: 'text-rose-600' },
-      coral: { bg: 'bg-orange-400', hover: 'hover:bg-orange-500', border: 'border-orange-400', text: 'text-orange-600' },
-      brown: { bg: 'bg-amber-800', hover: 'hover:bg-amber-900', border: 'border-amber-800', text: 'text-amber-800' },
-      slate: { bg: 'bg-slate-600', hover: 'hover:bg-slate-700', border: 'border-slate-600', text: 'text-slate-600' },
+      'mint': { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-500', text: 'text-emerald-600' },
+      'sky': { bg: 'bg-sky-500', hover: 'hover:bg-sky-600', border: 'border-sky-500', text: 'text-sky-600' },
+      'indigo': { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', border: 'border-indigo-500', text: 'text-indigo-600' },
+      'coral': { bg: 'bg-orange-400', hover: 'hover:bg-orange-500', border: 'border-orange-400', text: 'text-orange-600' },
+      'sage': { bg: 'bg-green-600', hover: 'hover:bg-green-700', border: 'border-green-600', text: 'text-green-600' },
+      'teal': { bg: 'bg-teal-600', hover: 'hover:bg-teal-700', border: 'border-teal-600', text: 'text-teal-600' },
+      'grape': { bg: 'bg-purple-500', hover: 'hover:bg-purple-600', border: 'border-purple-500', text: 'text-purple-600' },
+      'amber': { bg: 'bg-amber-600', hover: 'hover:bg-amber-700', border: 'border-amber-600', text: 'text-amber-600' },
+      'rose': { bg: 'bg-rose-600', hover: 'hover:bg-rose-700', border: 'border-rose-600', text: 'text-rose-600' },
+      'azure': { bg: 'bg-sky-500', hover: 'hover:bg-sky-600', border: 'border-sky-500', text: 'text-sky-600' },
+      'emerald': { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-500', text: 'text-emerald-600' },
+      'mango': { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', border: 'border-amber-500', text: 'text-amber-600' },
+      'slate': { bg: 'bg-slate-500', hover: 'hover:bg-slate-600', border: 'border-slate-500', text: 'text-slate-600' },
+      'lilac': { bg: 'bg-purple-500', hover: 'hover:bg-purple-600', border: 'border-purple-500', text: 'text-purple-600' },
+      'crimson': { bg: 'bg-red-600', hover: 'hover:bg-red-700', border: 'border-red-600', text: 'text-red-600' },
+      'turquoise': { bg: 'bg-cyan-500', hover: 'hover:bg-cyan-600', border: 'border-cyan-500', text: 'text-cyan-600' },
+      'clay': { bg: 'bg-red-600', hover: 'hover:bg-red-700', border: 'border-red-600', text: 'text-red-600' },
+      'forest': { bg: 'bg-green-700', hover: 'hover:bg-green-800', border: 'border-green-700', text: 'text-green-700' },
+      'violet': { bg: 'bg-violet-600', hover: 'hover:bg-violet-700', border: 'border-violet-600', text: 'text-violet-600' },
+      'ocean': { bg: 'bg-blue-600', hover: 'hover:bg-blue-700', border: 'border-blue-600', text: 'text-blue-600' },
     };
 
-    return colorMap[color] || colorMap.green;
+    return colorMap[color] || colorMap['mint'];
   };
 
   if (!user) {

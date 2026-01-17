@@ -11,7 +11,7 @@ export function BottomNav() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
-  const [profileColor, setProfileColor] = useState<string>('green');
+  const [profileColor, setProfileColor] = useState<string>('mint');
   const [isNavigating, setIsNavigating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -174,29 +174,29 @@ export function BottomNav() {
   // Helper function to get indicator color classes based on profile color
   const getIndicatorColorClasses = useCallback((color: string) => {
     const colorMap: Record<string, { bg: string; text: string }> = {
-      red: { bg: 'bg-red-600', text: 'text-white' },
-      orange: { bg: 'bg-orange-600', text: 'text-white' },
-      amber: { bg: 'bg-amber-600', text: 'text-white' },
-      yellow: { bg: 'bg-yellow-600', text: 'text-white' },
-      lime: { bg: 'bg-lime-600', text: 'text-white' },
-      green: { bg: 'bg-green-600', text: 'text-white' },
-      emerald: { bg: 'bg-emerald-600', text: 'text-white' },
-      mint: { bg: 'bg-teal-400', text: 'text-white' },
-      teal: { bg: 'bg-teal-600', text: 'text-white' },
-      cyan: { bg: 'bg-cyan-600', text: 'text-white' },
-      sky: { bg: 'bg-sky-600', text: 'text-white' },
-      blue: { bg: 'bg-blue-600', text: 'text-white' },
-      indigo: { bg: 'bg-indigo-600', text: 'text-white' },
-      purple: { bg: 'bg-purple-600', text: 'text-white' },
-      violet: { bg: 'bg-violet-600', text: 'text-white' },
-      pink: { bg: 'bg-pink-600', text: 'text-white' },
-      rose: { bg: 'bg-rose-600', text: 'text-white' },
-      coral: { bg: 'bg-orange-400', text: 'text-white' },
-      brown: { bg: 'bg-amber-800', text: 'text-white' },
-      slate: { bg: 'bg-slate-600', text: 'text-white' },
+      'mint': { bg: 'bg-emerald-500', text: 'text-white' },
+      'sky': { bg: 'bg-sky-500', text: 'text-white' },
+      'indigo': { bg: 'bg-indigo-500', text: 'text-white' },
+      'coral': { bg: 'bg-orange-400', text: 'text-white' },
+      'sage': { bg: 'bg-green-600', text: 'text-white' },
+      'teal': { bg: 'bg-teal-600', text: 'text-white' },
+      'grape': { bg: 'bg-purple-500', text: 'text-white' },
+      'amber': { bg: 'bg-amber-600', text: 'text-white' },
+      'rose': { bg: 'bg-rose-600', text: 'text-white' },
+      'azure': { bg: 'bg-sky-500', text: 'text-white' },
+      'emerald': { bg: 'bg-emerald-500', text: 'text-white' },
+      'mango': { bg: 'bg-amber-500', text: 'text-white' },
+      'slate': { bg: 'bg-slate-500', text: 'text-white' },
+      'lilac': { bg: 'bg-purple-500', text: 'text-white' },
+      'crimson': { bg: 'bg-red-600', text: 'text-white' },
+      'turquoise': { bg: 'bg-cyan-500', text: 'text-white' },
+      'clay': { bg: 'bg-red-600', text: 'text-white' },
+      'forest': { bg: 'bg-green-700', text: 'text-white' },
+      'violet': { bg: 'bg-violet-600', text: 'text-white' },
+      'ocean': { bg: 'bg-blue-600', text: 'text-white' },
     };
 
-    return colorMap[color] || colorMap.green;
+    return colorMap[color] || colorMap['mint'];
   }, []);
 
   // Memoize indicatorColors
